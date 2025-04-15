@@ -548,6 +548,82 @@
         bottom: 20px;
       }
     }
+
+    /* Estilos para el panel de prueba Odoo */
+    .test-panel {
+      margin-top: 40px;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .test-panel h3 {
+      color: #006600;
+      margin-bottom: 15px;
+      font-size: calc(22px + 1vw);
+      text-align: center;
+    }
+
+    .test-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .test-btn {
+      padding: 10px 20px;
+      background-color: #006600;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .test-btn:hover {
+      background-color: #008800;
+    }
+
+    .test-results {
+      background-color: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .test-results.success {
+      border-color: #28a745;
+      background-color: #d4edda;
+    }
+
+    .test-results.error {
+      border-color: #dc3545;
+      background-color: #f8d7da;
+    }
+
+    /* Media queries para el panel de prueba */
+    @media screen and (max-width: 600px) {
+      .test-panel h3 {
+        font-size: 18px !important;
+      }
+
+      .test-btn {
+        padding: 8px 15px !important;
+        font-size: 14px !important;
+      }
+
+      .test-results {
+        font-size: 12px !important;
+        padding: 10px !important;
+      }
+    }
   </style>
 
   </head>
@@ -700,8 +776,17 @@
     <span class="description" id="version-description"></span>
   </div>
 
-  <!-- Contenedor de logs -->
-  <!-- Eliminado el div de logs -->
+  <!-- Panel de pruebas de Odoo -->
+  <div class="test-panel" id="odoo-test-panel">
+    <h3>Panel de Pruebas de Integración con Odoo</h3>
+    <div class="test-actions">
+      <button class="test-btn" id="test-odoo-btn">Crear Lead de Prueba</button>
+      <button class="test-btn" id="test-odoo-details-btn">Crear Lead y Ver Detalles</button>
+    </div>
+    <div class="test-results" id="test-results">
+      Los resultados de la prueba aparecerán aquí.
+    </div>
+  </div>
 
   <script>
     // Variables globales actualizadas
@@ -972,6 +1057,47 @@
         console.error('Error en carga inicial:', error);
         showAlert("Error en carga inicial, continuando en modo offline", "warning");
       });
+
+      // Configurar los botones de prueba
+      const testOdooBtn = document.getElementById('test-odoo-btn');
+      const testOdooDetailsBtn = document.getElementById('test-odoo-details-btn');
+      const testResults = document.getElementById('test-results');
+      
+      if (testOdooBtn) {
+        testOdooBtn.addEventListener('click', function() {
+          testResults.textContent = 'Enviando lead de prueba a Odoo...';
+          testResults.className = 'test-results';
+          
+          google.script.run
+            .withSuccessHandler(function(result) {
+              testResults.textContent = JSON.stringify(result, null, 2);
+              testResults.className = result.success ? 'test-results success' : 'test-results error';
+            })
+            .withFailureHandler(function(error) {
+              testResults.textContent = 'Error: ' + error.message;
+              testResults.className = 'test-results error';
+            })
+            .agregar_lead_test(false);
+        });
+      }
+      
+      if (testOdooDetailsBtn) {
+        testOdooDetailsBtn.addEventListener('click', function() {
+          testResults.textContent = 'Enviando lead de prueba a Odoo y solicitando detalles completos...';
+          testResults.className = 'test-results';
+          
+          google.script.run
+            .withSuccessHandler(function(result) {
+              testResults.textContent = JSON.stringify(result, null, 2);
+              testResults.className = result.success ? 'test-results success' : 'test-results error';
+            })
+            .withFailureHandler(function(error) {
+              testResults.textContent = 'Error: ' + error.message;
+              testResults.className = 'test-results error';
+            })
+            .agregar_lead_test(true);
+        });
+      }
     });
 
     // Función para cargar datos iniciales
