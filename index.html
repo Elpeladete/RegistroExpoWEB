@@ -327,6 +327,89 @@
       font-style: italic;
     }
 
+    /* Estilos para la sección de integraciones */
+    .integration-info {
+      margin-top: 40px;
+      padding: 20px;
+      background-color: #f8f9fa;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+    }
+
+    .integration-info h3 {
+      color: #006600;
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: calc(20px + 1vw);
+    }
+
+    .integration-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .integration-item {
+      display: flex;
+      align-items: center;
+      background-color: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      min-width: 160px;
+    }
+
+    .integration-icon {
+      font-size: 24px;
+      margin-right: 10px;
+    }
+
+    .integration-name {
+      font-weight: bold;
+      font-size: calc(15px + 0.5vw);
+    }
+
+    .integration-note {
+      text-align: center;
+      margin-top: 20px;
+      font-style: italic;
+      color: #666;
+      font-size: calc(14px + 0.5vw);
+    }
+
+    @media screen and (max-width: 600px) {
+      .integration-info {
+        margin-top: 20px;
+        padding: 15px;
+      }
+
+      .integration-info h3 {
+        font-size: 18px;
+      }
+
+      .integration-list {
+        gap: 10px;
+      }
+
+      .integration-item {
+        min-width: calc(50% - 10px);
+        padding: 8px 10px;
+      }
+
+      .integration-icon {
+        font-size: 20px;
+      }
+
+      .integration-name {
+        font-size: 14px;
+      }
+
+      .integration-note {
+        font-size: 12px;
+      }
+    }
+
     /* Media queries para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -689,6 +772,30 @@
         <span class="stat-value" id="forms-pending">0</span>
         <span class="stat-label">Pendientes</span>
       </div>
+    </div>
+
+    <!-- Información de integraciones activas -->
+    <div class="integration-info">
+      <h3>Integraciones activas</h3>
+      <div class="integration-list">
+        <div class="integration-item">
+          <span class="integration-icon">📊</span>
+          <span class="integration-name">Google Forms</span>
+        </div>
+        <div class="integration-item">
+          <span class="integration-icon">🔄</span>
+          <span class="integration-name">Bitrix24 CRM</span>
+        </div>
+        <div class="integration-item">
+          <span class="integration-icon">💬</span>
+          <span class="integration-name">WazzUp</span>
+        </div>
+        <div class="integration-item">
+          <span class="integration-icon">🚀</span>
+          <span class="integration-name">Odoo CRM</span>
+        </div>
+      </div>
+      <p class="integration-note">Los datos del formulario se sincronizarán con todos los sistemas automáticamente</p>
     </div>
 
   </div>
