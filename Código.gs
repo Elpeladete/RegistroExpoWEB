@@ -4,35 +4,49 @@ function doGet(e) {
   const template = HtmlService.createTemplateFromFile('index');
   const output = template.evaluate()
     .setTitle('RegistroExpoWEB')
-    .setFaviconUrl(CONFIG.APP.IMAGES.FAVICON)
+    .setFaviconUrl('https://i.ibb.co/3mNwdJWt/SP.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   return output;
 }
 
 function getLocalidadesData() {
+  const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTGUaoj9BAFuYQW4_3VRSn8sgxZuWPPfadnpE4RefsvvTkNDSpej6aeF2TdNdiK0SkcMcWsO30WrnVz/pub?output=csv";
+
   try {
-    const response = UrlFetchApp.fetch(CONFIG.API.LOCALIDADES.CSV_URL);
+    const response = UrlFetchApp.fetch(csvUrl);
     const csvText = response.getContentText();
-    return Utils.parseCSV(csvText);
+    const data = parseCSV(csvText);
+    return data;
   } catch (error) {
-    Utils.logError("getLocalidadesData", error);
+    Logger.log("Error al cargar el CSV: " + error.message);
     return [];
   }
 }
 
-function sendDataToForm(formData) {
-  try {
-    // Validar datos antes de enviar
-    const validation = Utils.validateFormData(formData);
-    if (!validation.isValid) {
-      return { 
-        success: false, 
-        message: "Validación fallida", 
-        errors: validation.errors 
-      };
-    }
+function parseCSV(csvText) {
+  const lines = csvText.split("\n");
+  const headers = lines[0].split(",").map((header) => header.trim());
+  const result = [];
 
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(",");
+    if (values.length === headers.length) {
+      const row = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index].trim();
+      });
+      result.push(row);
+    }
+  }
+
+  return result;
+}
+
+function sendDataToForm(formData) {
+  const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSeMgPwBKlaUpWUuAa2lJP8g5srO2cg3IEWs4YXZd4xdmgkjlw/formResponse";
+
+  try {
     const payload = {
       "entry.1656615011": formData.apellido,
       "entry.1575414634": formData.nombre,
@@ -63,18 +77,20 @@ function sendDataToForm(formData) {
       payload: payload
     };
 
-    const response = UrlFetchApp.fetch(CONFIG.API.GOOGLE_FORMS.URL, options);
-    return Utils.handleApiResponse(response, "Google Forms");
+    UrlFetchApp.fetch(formUrl, options);
+    return { success: true };
   } catch (error) {
-    return Utils.logError("sendDataToForm", error);
+    return { success: false, message: error.message };
   }
 }
 
 function sendDataToBitrix(formData, verticales) {
+  const bitrixURL = "https://dye.bitrix24.com/rest/1017/8dkpeiwb7jwszi8q/crm.lead.add.json";
+
   try {
     const payload = `fields[NAME]=${encodeURIComponent(formData.nombre)}&` +
                     `fields[LAST_NAME]=${encodeURIComponent(formData.apellido)}&` +
-                    `fields[ASSIGNED_BY_ID]=${encodeURIComponent(CONFIG.COMERCIALES[formData.comercialAsignado] || "1")}&` +
+                    `fields[ASSIGNED_BY_ID]=${encodeURIComponent(getBitrixID(formData.comercialAsignado))}&` +
                     `fields[EMAIL][0][VALUE]=${encodeURIComponent(formData.mail)}&` +
                     `fields[EMAIL][0][VALUE_TYPE]=WORK&` +
                     `fields[PHONE][0][VALUE]=${encodeURIComponent(formData.telefono)}&` +
@@ -89,267 +105,196 @@ function sendDataToBitrix(formData, verticales) {
                     `fields[OPENED]=Y&` +
                     `fields[STATUS_ID]=IN_PROCESS`;
 
-    const response = UrlFetchApp.fetch(CONFIG.API.BITRIX.URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      payload: payload,
-      muteHttpExceptions: true
+    const response = UrlFetchApp.fetch(bitrixURL, {
+      method: "post",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      payload: payload
     });
 
-    return Utils.handleApiResponse(response, "Bitrix");
+    const responseData = JSON.parse(response.getContentText());
+    if (responseData.result) {
+      return { success: true, message: "Datos enviados correctamente a Bitrix." };
+    } else {
+      return { success: false, message: responseData.error_description || "Error desconocido" };
+    }
   } catch (error) {
-    return Utils.logError("sendDataToBitrix", error);
+    return { success: false, message: error.message };
   }
 }
 
-function sendDataToOdoo(formData) {
-  try {
-    // Validar datos antes de enviar
-    const validation = Utils.validateFormData(formData);
-    if (!validation.isValid) {
-      return { 
-        success: false, 
-        message: "Validación fallida para Odoo", 
-        errors: validation.errors 
-      };
-    }
+function getBitrixID(comercialName) {
+  const comerciales = {
+    "Adilson Simch": "532",
+    "Adrián Cardinali": "464",
+    "Andrés Hernández": "1141",
+    "Carlos Bermúdez": "486",
+    "César Vigna": "8",
+    "Facundo Pagani": "308",
+    "Germán González": "6",
+    "Ignacio Espinoza": "54",
+    "Juan Manuel Silva": "1019",
+    "Juan Martín Venencia": "28",
+    "Luis Adrover": "1",
+    "Martín Aused": "1017",
+    "Matías Aliaga": "12",
+    "Matías Corradi": "1379",
+    "Matías García": "1413",
+    "Matías Koller": "1385",
+    "Paulo Castillo": "492",
+    "Ramiro Fernández": "16",
+    "Renzo Bonavia": "1269",
+    "Roberto Catala": "20",
+    "Fernanda Frade": "6855",
+    "Juan Martín Oliver": "1469",
+    "Jeronimo Sfascia": "1471",
+    "Adriana Berardinelli": "1343",
+    "Pablo Puy": "1343",
+    "Cecilia Gómez": "1343",
+    "Miguel Ricchiardi": "568",
+    "Jorge Salguero": "568",
+    "Juan Del Cerro": "1387",
+    "Claudio Báez": "484",
+    "Marcelo Rosenthal": "1393",
+    "Maximiliano Arduini": "1373",
+    "Jorge Álvarez": "1021",
+    "Pedro Alcorta": "474",
+    "Gonzalo Ortiz": "1383",
+    "Manuel Pacheco": "1405",
+    "Sebastian Schroh": "1467",
+    "Nicolás Scaramuzza": "6867",
+    "Ricardo Vicentín": "6863",
+    "Joaquín Fernández": "58",
+    "Ailín Borracci": "1755",
+    "Camila Gorosito": "6869",
+    "Pablo Casas": "6871"
+  };
 
-    // Enviar datos a Odoo usando el módulo especializado
-    const result = Odoo.createLead(formData);
-    
-    // Manejar resultado
-    if (result && result.success) {
-      Logger.log(`Lead creado en Odoo exitosamente. ID: ${result.leadId}`);
-      return {
-        success: true,
-        leadId: result.leadId,
-        message: "Lead creado correctamente en Odoo"
-      };
-    } else {
-      const errorMsg = result && result.message ? result.message : "Error desconocido al crear lead en Odoo";
-      Logger.log(`Error al crear lead en Odoo: ${errorMsg}`);
-      return {
-        success: false,
-        message: errorMsg,
-        error: result.error
-      };
-    }
-  } catch (error) {
-    return Utils.logError("sendDataToOdoo", error);
-  }
+  return comerciales[comercialName] || "1";
 }
 
 function sendWazzupMessage(phone, name, assignee, assigneePhone, leadLastName, leadLocalidad, leadProvincia, verticales, leadComentarios, appUSR, appUSREmpresa) {
-  try {
-    const formattedPhone = Utils.formatPhoneNumber(phone);
-    const formattedAssigneePhone = Utils.formatPhoneNumber(assigneePhone);
+  const WAZZUP_API_URL = "https://api.wazzup24.com/v3/message";
+  const API_KEY = "5f5261984014423db79fb7c890789d91";
+  const CHANNEL_ID = "9f635cf7-1ee8-4fab-be65-d91ca6eadc70";
 
-    const messageText = `Hola ${name}\nGracias por visitarnos en esta nueva exposición.\nLe adjunto información vista en nuestro stand.\n*De parte del equipo de DyE y su red, gracias y saludos!* \nSu comercial asignado es: ${assignee}.\nSu contacto es: ${assigneePhone}.`;
+  // Formatear números de teléfono (eliminar caracteres no numéricos y agregar prefijo)
+  const cleanPhone = phone.replace(/\D/g, '');
+  const cleanAssigneePhone = assigneePhone.replace(/\D/g, '');
+  
+  // Agregar prefijo +549 si no está presente
+  const formattedPhone = cleanPhone.startsWith('549') ? cleanPhone : `549${cleanPhone}`;
+  const formattedAssigneePhone = cleanAssigneePhone.startsWith('549') ? cleanAssigneePhone : `549${cleanAssigneePhone}`;
 
-    const messageTextAssignee = `
-    Hola ${assignee}
-    Se le asignó el siguiente contacto:
-    Nombre: ${name}
-    Apellido: ${leadLastName}
-    Teléfono: ${phone}
-    Localidad: ${leadLocalidad}
-    Provincia: ${leadProvincia}
-    Verticales: ${verticales}
-    Comentarios: ${leadComentarios}
-    Registrado por: ${appUSR} - ${appUSREmpresa}.`;
+  const messageText = `Hola ${name}\nGracias por visitarnos en esta nueva exposición.\nLe adjunto información vista en nuestro stand.\n*De parte del equipo de DyE y su red, gracias y saludos!* \nSu comercial asignado es: ${assignee}.\nSu contacto es: ${assigneePhone}.`;
 
-    const results = [];
+  const messageTextAssignee = `
+  Hola ${assignee}
+  Se le asignó el siguiente contacto:
+  Nombre: ${name}
+  Apellido: ${leadLastName}
+  Teléfono: ${phone}
+  Localidad: ${leadLocalidad}
+  Provincia: ${leadProvincia}
+  Verticales: ${verticales}
+  Comentarios: ${leadComentarios}
+  Registrado por: ${appUSR} - ${appUSREmpresa}.`;
 
-    // Enviar mensaje inicial al cliente
-    results.push(sendWazzupRequest({
-      chatId: `+${formattedPhone}@c.us`,
-      type: "text",
-      text: messageText
-    }));
+  // Mapeo de verticales a imágenes
+  const verticalImages = {
+    'weedSeeker': "https://i.ibb.co/svRLJc0/Weed-Seeker.jpg",
+    'solucionSiembra': "https://i.ibb.co/dDVbr35/Siembra.jpg",
+    'guiaAutoguia': "https://i.ibb.co/dGZVBZd/Autoguia.jpg",
+    'tapsSenales': "https://i.ibb.co/XSTN821/TAPs.jpg",
+    'solucionPulverizacion': "https://i.ibb.co/BcnMsfX/Pulverizacion.jpg",
+    'dronesDJI': "https://i.ibb.co/0mPx08M/DJI.jpg"
+  };
 
-    // Enviar imágenes según verticales seleccionadas
-    const selectedVerticales = verticales.split(',').map(v => v.trim().toLowerCase());
-    Object.entries(CONFIG.APP.IMAGES.VERTICALS).forEach(([key, imageUrl]) => {
-      const verticalName = key.toLowerCase().replace('_', '');
-      if (selectedVerticales.some(v => v.includes(verticalName))) {
-        results.push(sendWazzupRequest({
-          chatId: `+${formattedPhone}@c.us`,
-          type: "image",
-          contentUri: imageUrl
-        }));
-      }
-    });
-
-    // Enviar mensaje al comercial
-    results.push(sendWazzupRequest({
-      chatId: `+${formattedAssigneePhone}@c.us`,
-      type: "text",
-      text: messageTextAssignee
-    }));
-
-    // NUEVA FUNCIONALIDAD: Enviar mensajes a especialistas según verticales
-    const especialistasANotificar = [];
-    
-    // Verificar WeedSeeker
-    if (selectedVerticales.some(v => v.includes('weedseeker'))) {
-      especialistasANotificar.push(CONFIG.ESPECIALISTAS.VERTICALES.WEEDSEEKER);
-    }
-    
-    // Verificar Siembra
-    if (selectedVerticales.some(v => v.includes('siembra'))) {
-      especialistasANotificar.push(CONFIG.ESPECIALISTAS.VERTICALES.SIEMBRA);
-    }
-    
-    // Verificar TAPs o Acción QR
-    if (selectedVerticales.some(v => v.includes('taps')) || selectedVerticales.some(v => v.includes('acción qr'))) {
-      especialistasANotificar.push(CONFIG.ESPECIALISTAS.VERTICALES.TAPS_ACCION_QR);
-    }
-    
-    // Verificar Drones DJI
-    if (selectedVerticales.some(v => v.includes('drones dji'))) {
-      especialistasANotificar.push(CONFIG.ESPECIALISTAS.VERTICALES.DRONES_DJI);
-    }
-    
-    // Enviar mensajes a los especialistas identificados
-    for (const especialista of especialistasANotificar) {
-      const formattedEspecialistaPhone = Utils.formatPhoneNumber(especialista.telefono);
-      const messageTextEspecialista = `
-      Hola ${especialista.nombre}
-      Le notifico de un prospecto interesado en su vertical:
-      Nombre: ${name}
-      Apellido: ${leadLastName}
-      Teléfono: ${phone}
-      Localidad: ${leadLocalidad}
-      Provincia: ${leadProvincia}
-      Verticales: ${verticales}
-      Comentarios: ${leadComentarios}
-      Registrado por: ${appUSR} - ${appUSREmpresa}
-      Comercial asignado: ${assignee}`;
-      
-      results.push(sendWazzupRequest({
-        chatId: `+${formattedEspecialistaPhone}@c.us`,
-        type: "text",
-        text: messageTextEspecialista
-      }));
-      
-      Logger.log(`Notificación enviada al especialista ${especialista.nombre} para la vertical correspondiente`);
-    }
-
-    // Verificar resultados
-    const errors = results.filter(r => !r.success);
-    if (errors.length > 0) {
-      Utils.logError("sendWazzupMessage", "Algunos mensajes fallaron");
-      return { success: false, errors: errors };
-    }
-
-    return { success: true, message: "Todos los mensajes enviados correctamente" };
-  } catch (error) {
-    return Utils.logError("sendWazzupMessage", error);
-  }
-}
-
-function sendWazzupRequest(messageData) {
-  try {
-    const payload = {
-      channelId: CONFIG.API.WAZZUP.CHANNEL_ID,
-      chatType: "whatsapp",
-      ...messageData
-    };
-
+  function sendRequest(payload) {
     const options = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${CONFIG.API.WAZZUP.KEY}`
+        "Authorization": `Bearer ${API_KEY}`
       },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
 
-    const response = UrlFetchApp.fetch(CONFIG.API.WAZZUP.URL, options);
-    return Utils.handleApiResponse(response, "Wazzup");
-  } catch (error) {
-    return Utils.logError("sendWazzupRequest", error);
-  }
-}
+    try {
+      const response = UrlFetchApp.fetch(WAZZUP_API_URL, options);
+      const responseCode = response.getResponseCode();
+      const responseBody = response.getContentText();
 
-/**
- * Función de prueba para crear un lead de ejemplo en Odoo
- * @param {boolean} returnFullResponse - Si es true, devuelve la respuesta completa de Odoo en vez de solo el ID
- * @returns {Object} - Resultado de la operación
- */
-function agregar_lead_test(returnFullResponse = false) {
-  try {
-    // Crear datos de prueba para un lead
-    const testFormData = {
-      nombre: "Test",
-      apellido: "Odoo Integration",
-      localidad: "Buenos Aires",
-      provincia: "Buenos Aires",
-      telefono: "1122334455",
-      mail: "test@example.com",
-      comentarios: "Este es un lead de prueba generado automáticamente para verificar la integración con Odoo",
-      montoEstimado: "5000 USD",
-      operadorApp: "Test Operator",
-      empresaOperador: "Test Company",
-      comercialAsignado: "Martín Aused",
-      evento: "Test ExpoAgro 2025",
-      concatenatedCheckboxes: "WeedSeeker, Solución Siembra, Drones DJI",
-      weedSeeker: true,
-      solucionSiembra: true,
-      dronesDJI: true
-    };
+      Logger.log("Código de respuesta HTTP: " + responseCode);
+      Logger.log("Cuerpo de la respuesta: " + responseBody);
+      Logger.log("Número formateado: " + formattedPhone); // Log para debugging
 
-    // Enviar datos de prueba a Odoo
-    Logger.log("Enviando lead de prueba a Odoo...");
-    const result = sendDataToOdoo(testFormData);
-    
-    // Registrar resultado en el log
-    if (result.success) {
-      Logger.log(`Lead de prueba creado exitosamente en Odoo con ID: ${result.leadId}`);
-      
-      // Opcionalmente obtener y devolver datos completos del lead creado
-      if (returnFullResponse) {
-        try {
-          const leadData = Odoo.execute(CONFIG.API.ODOO.MODEL, 'read', [[result.leadId], []]);
-          return {
-            success: true,
-            message: "Lead de prueba creado y recuperado correctamente",
-            leadId: result.leadId,
-            leadData: leadData
-          };
-        } catch (readError) {
-          return {
-            success: true,
-            message: "Lead de prueba creado, pero no se pudo recuperar la información completa",
-            leadId: result.leadId,
-            error: readError.message
-          };
-        }
+      if (responseCode === 201) {
+        return { success: true, message: "Mensaje enviado correctamente." };
+      } else {
+        return { success: false, message: `Error: ${responseBody}` };
       }
-
-      return {
-        success: true,
-        message: "Lead de prueba creado correctamente en Odoo",
-        leadId: result.leadId
-      };
-    } else {
-      Logger.log(`Error al crear lead de prueba en Odoo: ${result.message}`);
-      return {
-        success: false,
-        message: `Error al crear lead de prueba en Odoo: ${result.message}`,
-        error: result.error
-      };
+    } catch (error) {
+      Logger.log("Error en la solicitud: " + error.message);
+      return { success: false, message: error.message || "Error al enviar el mensaje." };
     }
-  } catch (error) {
-    const errorMsg = `Error general al ejecutar la prueba: ${error.message || error}`;
-    Logger.log(errorMsg);
-    return {
-      success: false,
-      message: errorMsg,
-      error: error
-    };
   }
+
+  // Enviar mensaje inicial al cliente
+  const textPayload = {
+    channelId: CHANNEL_ID,
+    chatId: `+${formattedPhone}@c.us`,
+    chatType: "whatsapp",
+    type: "text",
+    text: messageText
+  };
+
+  const textResponse = sendRequest(textPayload);
+  if (!textResponse.success) {
+    return textResponse;
+  }
+
+  // Enviar imágenes según las verticales seleccionadas
+  const selectedVerticales = verticales.split(',').map(v => v.trim().toLowerCase());
+  const imagePromises = [];
+
+  for (const [vertical, imageUrl] of Object.entries(verticalImages)) {
+    if (selectedVerticales.some(v => v.includes(vertical.toLowerCase()))) {
+      const imagePayload = {
+        channelId: CHANNEL_ID,
+        chatId: `+${formattedPhone}@c.us`,
+        chatType: "whatsapp",
+        type: "image",
+        contentUri: imageUrl
+      };
+      imagePromises.push(sendRequest(imagePayload));
+    }
+  }
+
+  // Enviar mensaje al comercial
+  const textPayloadAssignee = {
+    channelId: CHANNEL_ID,
+    chatId: `+${formattedAssigneePhone}@c.us`,
+    chatType: "whatsapp",
+    type: "text",
+    text: messageTextAssignee
+  };
+
+  const assigneeResponse = sendRequest(textPayloadAssignee);
+  if (!assigneeResponse.success) {
+    Logger.log("Error al enviar mensaje al comercial:", assigneeResponse.message);
+  }
+
+  // Verificar si hubo errores en el envío de imágenes
+  const imageErrors = imagePromises.filter(response => !response.success);
+  if (imageErrors.length > 0) {
+    Logger.log("Errores al enviar imágenes:", imageErrors);
+    return { success: false, message: "Error al enviar algunas imágenes" };
+  }
+
+  return { success: true, message: "Mensajes enviados correctamente" };
 }
 
 function checkServerStatus() {
@@ -357,14 +302,13 @@ function checkServerStatus() {
     return {
       status: "online",
       timestamp: new Date().toISOString(),
-      version: CONFIG.APP.VERSION,
-      maxBatchSize: CONFIG.APP.MAX_BATCH_SIZE,
-      retryLimit: CONFIG.APP.RETRY_LIMIT,
-      syncInterval: CONFIG.APP.SYNC_INTERVAL,
+      version: "V2R032.180325",
+      maxBatchSize: 5,
+      retryLimit: 3,
+      syncInterval: 30000,
       isOnline: true
     };
   } catch (error) {
-    Utils.logError("checkServerStatus", error);
     return {
       status: "error",
       message: error.message,
@@ -379,21 +323,8 @@ function processOfflineData(formDataArray) {
   
   for (const formData of formDataArray) {
     try {
-      // Validar datos
-      const validation = Utils.validateFormData(formData);
-      if (!validation.isValid) {
-        results.push({
-          id: formData.timestamp,
-          success: false,
-          errors: { validation: validation.errors }
-        });
-        continue;
-      }
-
-      // Procesar en los diferentes sistemas
       const formsResult = sendDataToForm(formData);
       const bitrixResult = sendDataToBitrix(formData, formData.concatenatedCheckboxes);
-      const odooResult = sendDataToOdoo(formData);
       const wazzupResult = sendWazzupMessage(
         formData.telefono,
         formData.nombre,
@@ -410,12 +341,11 @@ function processOfflineData(formDataArray) {
 
       results.push({
         id: formData.timestamp,
-        success: formsResult.success && bitrixResult.success && odooResult.success && wazzupResult.success,
+        success: formsResult.success && bitrixResult.success && wazzupResult.success,
         errors: {
-          forms: !formsResult.success ? formsResult.error : null,
-          bitrix: !bitrixResult.success ? bitrixResult.error : null,
-          odoo: !odooResult.success ? odooResult.error : null,
-          wazzup: !wazzupResult.success ? wazzupResult.error : null
+          forms: !formsResult.success ? "Error en Google Forms" : null,
+          bitrix: !bitrixResult.success ? bitrixResult.message : null,
+          wazzup: !wazzupResult.success ? wazzupResult.message : null
         }
       });
     } catch (error) {
@@ -423,7 +353,7 @@ function processOfflineData(formDataArray) {
         id: formData.timestamp,
         success: false,
         errors: {
-          general: Utils.logError("processOfflineData", error).error
+          general: error.message || "Error desconocido al procesar el formulario"
         }
       });
     }
