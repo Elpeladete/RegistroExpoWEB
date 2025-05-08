@@ -302,7 +302,7 @@ function checkServerStatus() {
     return {
       status: "online",
       timestamp: new Date().toISOString(),
-      version: "V2R032.180325",
+      version: "V02R033.080525",
       maxBatchSize: 5,
       retryLimit: 3,
       syncInterval: 30000,
