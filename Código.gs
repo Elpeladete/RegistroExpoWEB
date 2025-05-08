@@ -714,8 +714,7 @@ function createOdooLead(formData) {
       // Dirección
       'street': formData.localidad || '',
       'city': formData.localidad || '',
-      'state_id': '', // ID de provincia (Odoo requiere el ID)
-      'country_id': '', // ID del país (Odoo requiere el ID)
+      'country_id': 10, // ID 10 corresponde a Argentina en Odoo
       
       // Campos de marketing
       'campaign_id': '', // ID de la campaña (debe obtenerse o crearse)
@@ -726,6 +725,17 @@ function createOdooLead(formData) {
       'referred': formData.evento || '' // Campo adicional para el evento
       // Eliminado 'x_origen' porque no existe en esta instalación de Odoo
     };
+
+    // Buscar el ID de la provincia
+    if (formData.provincia) {
+      const provinceId = getProvinceId(odooUrl, db, uid, password, formData.provincia);
+      if (provinceId) {
+        odooLeadData['state_id'] = provinceId;
+        Logger.log("ID de provincia encontrado y asignado: " + provinceId);
+      } else {
+        Logger.log("No se encontró ID para la provincia: " + formData.provincia);
+      }
+    }
 
     // Si tenemos bitrixId del comercial, podemos intentar mapear al ID de Odoo
     if (formData.bitrixId) {
@@ -865,6 +875,88 @@ function getSourceId(url, db, uid, password, sourceName) {
   } catch (error) {
     Logger.log("Error al obtener/crear origen: " + error.toString());
     return null;
+  }
+}
+
+// Función para buscar el ID de la provincia en Odoo
+function getProvinceId(url, db, uid, password, provinceName, countryId = 10) {
+  if (!provinceName) return false;
+  
+  try {
+    Logger.log("Buscando provincia: " + provinceName + " para el país ID: " + countryId);
+    
+    // Normalizar el nombre de la provincia para la búsqueda
+    const normalizedName = provinceName.trim().toLowerCase();
+    
+    // Mapeo de nombres comunes de provincias argentinas a sus nombres en Odoo
+    const provinceMapping = {
+      'buenos aires': 'Buenos Aires',
+      'caba': 'Ciudad Autónoma de Buenos Aires',
+      'capital federal': 'Ciudad Autónoma de Buenos Aires',
+      'ciudad autonoma de buenos aires': 'Ciudad Autónoma de Buenos Aires',
+      'ciudad de buenos aires': 'Ciudad Autónoma de Buenos Aires',
+      'catamarca': 'Catamarca',
+      'chaco': 'Chaco',
+      'chubut': 'Chubut',
+      'cordoba': 'Córdoba',
+      'corrientes': 'Corrientes',
+      'entre rios': 'Entre Ríos',
+      'formosa': 'Formosa',
+      'jujuy': 'Jujuy',
+      'la pampa': 'La Pampa',
+      'la rioja': 'La Rioja',
+      'mendoza': 'Mendoza',
+      'misiones': 'Misiones',
+      'neuquen': 'Neuquén',
+      'rio negro': 'Río Negro',
+      'salta': 'Salta',
+      'san juan': 'San Juan',
+      'san luis': 'San Luis',
+      'santa cruz': 'Santa Cruz',
+      'santa fe': 'Santa Fe',
+      'santiago del estero': 'Santiago del Estero',
+      'tierra del fuego': 'Tierra del Fuego',
+      'tucuman': 'Tucumán'
+    };
+    
+    // Intentar encontrar el nombre normalizado de la provincia
+    const mappedProvinceName = provinceMapping[normalizedName] || provinceName;
+    
+    // Buscar la provincia por nombre exacto
+    let provinceIds = xmlrpcExecute(
+      url,
+      db,
+      uid,
+      password,
+      'res.country.state',
+      'search',
+      [[['name', '=', mappedProvinceName], ['country_id', '=', countryId]]]
+    );
+    
+    // Si no se encuentra, intentar buscar con ilike (no distingue mayúsculas/minúsculas y es parcial)
+    if (!provinceIds || provinceIds.length === 0) {
+      provinceIds = xmlrpcExecute(
+        url,
+        db,
+        uid,
+        password,
+        'res.country.state',
+        'search',
+        [[['name', 'ilike', mappedProvinceName], ['country_id', '=', countryId]]]
+      );
+    }
+    
+    // Si encontramos resultados, devolver el primer ID
+    if (provinceIds && provinceIds.length > 0) {
+      Logger.log("Provincia encontrada con ID: " + provinceIds[0]);
+      return provinceIds[0];
+    }
+    
+    Logger.log("No se encontró la provincia: " + provinceName);
+    return false;
+  } catch (error) {
+    Logger.log("Error al buscar provincia: " + error.toString());
+    return false;
   }
 }
 
