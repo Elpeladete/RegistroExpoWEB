@@ -174,18 +174,14 @@ function getBitrixID(comercialName) {
   return comerciales[comercialName] || "1";
 }
 
-function sendWazzupMessage(phone, name, assignee, assigneePhone, leadLastName, leadLocalidad, leadProvincia, verticales, leadComentarios, appUSR, appUSREmpresa) {
+function sendWazzupMessage(phone, name, assignee, assigneePhone, leadLastName, leadLocalidad, leadProvincia, verticales, leadComentarios, appUSR, appUSREmpresa, leadPais) {
   const WAZZUP_API_URL = "https://api.wazzup24.com/v3/message";
   const API_KEY = "5f5261984014423db79fb7c890789d91";
   const CHANNEL_ID = "9f635cf7-1ee8-4fab-be65-d91ca6eadc70";
 
-  // Formatear números de teléfono (eliminar caracteres no numéricos y agregar prefijo)
-  const cleanPhone = phone.replace(/\D/g, '');
-  const cleanAssigneePhone = assigneePhone.replace(/\D/g, '');
-  
-  // Agregar prefijo +549 si no está presente
-  const formattedPhone = cleanPhone.startsWith('549') ? cleanPhone : `549${cleanPhone}`;
-  const formattedAssigneePhone = cleanAssigneePhone.startsWith('549') ? cleanAssigneePhone : `549${cleanAssigneePhone}`;
+  // Formatear números de teléfono según el país
+  const formattedPhone = formatPhoneByCountry(phone, leadPais);
+  const formattedAssigneePhone = formatPhoneByCountry(assigneePhone, leadPais);
 
   const messageText = `Hola ${name}\nGracias por visitarnos en esta nueva exposición.\nLe adjunto información vista en nuestro stand.\n*De parte del equipo de DyE y su red, gracias y saludos!* \nSu comercial asignado es: ${assignee}.\nSu contacto es: ${assigneePhone}.`;
 
@@ -302,7 +298,7 @@ function checkServerStatus() {
     return {
       status: "online",
       timestamp: new Date().toISOString(),
-      version: "V02R033.080525",
+      version: "V02R034.270525",
       maxBatchSize: 5,
       retryLimit: 3,
       syncInterval: 30000,
@@ -650,6 +646,7 @@ function createOdooLead(formData) {
     
     // Preparar datos para el lead
     const nombreCompleto = formData.nombre + " " + formData.apellido;
+    Logger.log(`Preparando datos para: ${nombreCompleto}, Email: ${formData.mail}, Teléfono: ${formData.telefono}`);
     
     // Construir descripción detallada con mejor formato para las notas internas
     let descripcion = `INFORMACIÓN DEL PROSPECTO\n`;
@@ -660,11 +657,11 @@ function createOdooLead(formData) {
     descripcion += `Nombre completo: ${nombreCompleto}\n`;
     descripcion += `Teléfono: ${formData.telefono || 'No proporcionado'}\n`;
     descripcion += `Email: ${formData.mail || 'No proporcionado'}\n\n`;
-    
-    descripcion += `UBICACIÓN:\n`;
+      descripcion += `UBICACIÓN:\n`;
     descripcion += `---------------------------------------------\n`;
     descripcion += `Localidad: ${formData.localidad || 'No proporcionada'}\n`;
-    descripcion += `Provincia: ${formData.provincia || 'No proporcionada'}\n\n`;
+    descripcion += `Provincia: ${formData.provincia || 'No proporcionada'}\n`;
+    descripcion += `País: ${formData.pais || 'No proporcionado'}\n\n`;
     
     descripcion += `INTERESES (VERTICALES):\n`;
     descripcion += `---------------------------------------------\n`;
@@ -691,9 +688,8 @@ function createOdooLead(formData) {
     descripcion += `---------------------------------------------\n`;
     descripcion += `Origen: Aplicación de recolección de datos\n`;
     // Incluir todos los campos disponibles del formulario para asegurar que no perdemos información
-    Object.keys(formData).forEach(key => {
-      // Excluir campos que ya hemos incluido en secciones específicas
-      if (!['nombre', 'apellido', 'telefono', 'mail', 'localidad', 'provincia', 
+    Object.keys(formData).forEach(key => {      // Excluir campos que ya hemos incluido en secciones específicas
+      if (!['nombre', 'apellido', 'telefono', 'mail', 'localidad', 'provincia', 'pais',
            'comentarios', 'montoEstimado', 'evento', 'operadorApp', 'empresaOperador',
            'comercialAsignado', 'telefonoComercial', 'mailComercial', 'concatenatedCheckboxes'].includes(key)) {
         descripcion += `${key}: ${formData[key] || 'No especificado'}\n`;
@@ -710,25 +706,35 @@ function createOdooLead(formData) {
       'description': descripcion,
       'type': 'lead', // Tipo lead (no oportunidad)
       'function': formData.operadorApp, // Cargo/función
-      
-      // Dirección
+        // Dirección
       'street': formData.localidad || '',
       'city': formData.localidad || '',
-      'country_id': 10, // ID 10 corresponde a Argentina en Odoo
-      
-      // Campos de marketing
+      'country_id': 10, // ID por defecto para Argentina, se actualizará dinámicamente abajo
+        // Campos de marketing - solo campaign_id y source_id
       'campaign_id': '', // ID de la campaña (debe obtenerse o crearse)
       'source_id': '', // ID del origen (debe obtenerse o crearse)
-      'medium_id': '', // ID del medio (debe obtenerse o crearse)
-      
+      // medium_id: No completar según requerimientos
       // Valores personalizados en campos de texto
       'referred': formData.evento || '' // Campo adicional para el evento
       // Eliminado 'x_origen' porque no existe en esta instalación de Odoo
     };
 
+    // Buscar el ID del país dinámicamente
+    if (formData.pais) {
+      const countryId = getCountryId(odooUrl, db, uid, password, formData.pais);
+      if (countryId) {
+        odooLeadData['country_id'] = countryId;
+        Logger.log("ID de país encontrado y asignado: " + countryId + " para " + formData.pais);
+      } else {
+        Logger.log("No se encontró ID para el país: " + formData.pais + ", usando Argentina por defecto");
+      }
+    } else {
+      Logger.log("No se proporcionó información del país, usando Argentina por defecto (ID: 10)");
+    }
+
     // Buscar el ID de la provincia
     if (formData.provincia) {
-      const provinceId = getProvinceId(odooUrl, db, uid, password, formData.provincia);
+      const provinceId = getProvinceId(odooUrl, db, uid, password, formData.provincia, odooLeadData['country_id']);
       if (provinceId) {
         odooLeadData['state_id'] = provinceId;
         Logger.log("ID de provincia encontrado y asignado: " + provinceId);
@@ -755,8 +761,7 @@ function createOdooLead(formData) {
     
     // Si se crea exitosamente, intentamos configurar la campaña
     if (leadId) {
-      try {
-        // Buscar o crear la campaña basada en el evento
+      try {        // Buscar o crear la campaña basada en el evento
         const campaignId = getCampaignId(odooUrl, db, uid, password, formData.evento);
         if (campaignId) {
           // Actualizar el lead con la campaña encontrada/creada
@@ -775,7 +780,7 @@ function createOdooLead(formData) {
         // Buscar o crear el origen
         const sourceId = getSourceId(odooUrl, db, uid, password, "Aplicación de recolección de datos");
         if (sourceId) {
-          // Actualizar el lead con el origen encontrado/creada
+          // Actualizar el lead con el origen encontrado/creado
           xmlrpcExecute(
             odooUrl,
             db,
@@ -792,13 +797,30 @@ function createOdooLead(formData) {
         // Continuamos aunque falle esta parte
       }
     }
-    
-    Logger.log("Lead creado exitosamente en Odoo con ID: " + leadId);
+      Logger.log("Lead creado exitosamente en Odoo con ID: " + leadId);
     return { success: true, lead_id: leadId };
     
   } catch (error) {
     Logger.log("Error al crear lead en Odoo: " + error.toString());
-    return { success: false, error: error.message || error.toString() };
+    
+    // Analizar el tipo de error para proporcionar información específica
+    const errorMessage = error.message || error.toString();
+    
+    // Si el error contiene información sobre duplicados, lo tratamos como tal
+    if (errorMessage.toLowerCase().includes('duplicate') || 
+        errorMessage.toLowerCase().includes('duplicado') ||
+        errorMessage.toLowerCase().includes('already exists') ||
+        errorMessage.toLowerCase().includes('ya existe')) {
+      Logger.log("Error identificado como duplicado basado en respuesta del servidor");
+      return { 
+        success: false, 
+        error: "Lead duplicado según el servidor de Odoo: " + errorMessage,
+        isDuplicate: true
+      };
+    }
+    
+    // Para otros errores, devolver la información general
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -870,11 +892,133 @@ function getSourceId(url, db, uid, password, sourceName) {
       [{ 'name': sourceName }]
     );
     
-    Logger.log("Nuevo origen creado con ID: " + newSourceId);
+    Logger.log("Nuevo origen creado with ID: " + newSourceId);
     return newSourceId;
   } catch (error) {
     Logger.log("Error al obtener/crear origen: " + error.toString());
     return null;
+  }
+}
+
+// Función para obtener o crear un medio en Odoo
+function getMediumId(url, db, uid, password, mediumName) {
+  if (!mediumName) return null;
+  
+  try {
+    const existingMediums = xmlrpcExecute(
+      url,
+      db,
+      uid,
+      password,
+      'utm.medium',
+      'search_read',
+      [[['name', '=', mediumName]], ['id', 'name'], 0, 1]
+    );
+    
+    if (existingMediums && existingMediums.length > 0) {
+      Logger.log("Medio encontrado con ID: " + existingMediums[0].id);
+      return existingMediums[0].id;
+    }
+    
+    const newMediumId = xmlrpcExecute(
+      url,
+      db,
+      uid,
+      password,
+      'utm.medium',
+      'create',
+      [{ 'name': mediumName }]
+    );
+    
+    Logger.log("Nuevo medio creado con ID: " + newMediumId);
+    return newMediumId;
+  } catch (error) {
+    Logger.log("Error al obtener/crear medio: " + error.toString());
+    return null;
+  }
+}
+
+// Función para buscar el ID del país en Odoo
+function getCountryId(url, db, uid, password, countryName) {
+  if (!countryName) return false;
+  
+  try {
+    Logger.log("Buscando país: " + countryName);
+    
+    // Normalizar el nombre del país para la búsqueda
+    const normalizedName = countryName.trim().toLowerCase();
+    
+    // Mapeo de nombres comunes de países a sus nombres en Odoo
+    const countryMapping = {
+      'argentina': 'Argentina',
+      'brasil': 'Brazil',
+      'brazil': 'Brazil',
+      'chile': 'Chile',
+      'uruguay': 'Uruguay',
+      'paraguay': 'Paraguay',
+      'bolivia': 'Bolivia',
+      'peru': 'Peru',
+      'perú': 'Peru',
+      'colombia': 'Colombia',
+      'venezuela': 'Venezuela',
+      'ecuador': 'Ecuador',
+      'mexico': 'Mexico',
+      'méxico': 'Mexico',
+      'estados unidos': 'United States',
+      'united states': 'United States',
+      'usa': 'United States',
+      'eeuu': 'United States',
+      'españa': 'Spain',
+      'spain': 'Spain',
+      'francia': 'France',
+      'france': 'France',
+      'alemania': 'Germany',
+      'germany': 'Germany',
+      'italia': 'Italy',
+      'italy': 'Italy',
+      'reino unido': 'United Kingdom',
+      'united kingdom': 'United Kingdom',
+      'uk': 'United Kingdom'
+    };
+    
+    // Intentar encontrar el nombre normalizado del país
+    const mappedCountryName = countryMapping[normalizedName] || countryName;
+    
+    // Buscar el país por nombre exacto
+    let countryIds = xmlrpcExecute(
+      url,
+      db,
+      uid,
+      password,
+      'res.country',
+      'search',
+      [[['name', '=', mappedCountryName]]]
+    );
+    
+    // Si no se encuentra, intentar buscar con ilike (no distingue mayúsculas/minúsculas y es parcial)
+    if (!countryIds || countryIds.length === 0) {
+      countryIds = xmlrpcExecute(
+        url,
+        db,
+        uid,
+        password,
+        'res.country',
+        'search',
+        [[['name', 'ilike', mappedCountryName]]]
+      );
+    }
+    
+    // Si encontramos resultados, devolver el primer ID
+    if (countryIds && countryIds.length > 0) {
+      Logger.log("País encontrado con ID: " + countryIds[0]);
+      return countryIds[0];
+    }
+    
+    Logger.log("No se encontró el país: " + countryName + ", usando Argentina por defecto");
+    return 10; // ID por defecto para Argentina
+  } catch (error) {
+    Logger.log("Error al buscar país: " + error.toString());
+    return 10; // ID por defecto para Argentina en caso de error
   }
 }
 
@@ -963,6 +1107,8 @@ function getProvinceId(url, db, uid, password, provinceName, countryId = 10) {
 function processOfflineData(formDataArray) {
   const results = [];
   
+  Logger.log(`=== INICIANDO PROCESAMIENTO DE ${formDataArray.length} FORMULARIOS ===`);
+  
   for (const formData of formDataArray) {
     try {
       // Obtener el estado de envío anterior si existe
@@ -978,51 +1124,80 @@ function processOfflineData(formDataArray) {
         id: formData.timestamp,
         success: true,
         errors: {},
-        destinations: {} // Registro de a qué destinos se envió correctamente
+        destinations: { ...previousStatus }, // Preservar estados anteriores exitosos
+        newAttempts: {} // Registro de nuevos intentos realizados en esta ejecución
       };
+      
+      Logger.log(`\n--- PROCESANDO FORMULARIO ${formData.timestamp} ---`);
+      Logger.log(`Nombre: ${formData.nombre} ${formData.apellido}, Email: ${formData.mail}, Teléfono: ${formData.telefono}`);
+      Logger.log(`Estados previos: Forms:${previousStatus.forms}, Bitrix:${previousStatus.bitrix}, Wazzup:${previousStatus.wazzup}, Odoo:${previousStatus.odoo}`);
+      
+      // Contar intentos necesarios
+      const pendingDestinations = [];
+      if (!previousStatus.forms) pendingDestinations.push('Google Forms');
+      if (!previousStatus.bitrix) pendingDestinations.push('Bitrix24');
+      if (!previousStatus.wazzup) pendingDestinations.push('WhatsApp');
+      if (!previousStatus.odoo) pendingDestinations.push('Odoo');
+      
+      if (pendingDestinations.length === 0) {
+        Logger.log("TODOS LOS DESTINOS YA FUERON ENVIADOS EXITOSAMENTE - SALTANDO");
+        resultObj.success = true;
+        results.push(resultObj);
+        continue;
+      }
+      
+      Logger.log(`Destinos pendientes: ${pendingDestinations.join(', ')}`);
       
       // ---- Google Forms ----
       if (!previousStatus.forms) {
+        Logger.log("→ Intentando envío a Google Forms...");
+        resultObj.newAttempts.forms = true;
         try {
           const formsResult = sendDataToForm(formData);
           resultObj.destinations.forms = formsResult.success;
           if (!formsResult.success) {
-            resultObj.success = false;
-            resultObj.errors.forms = "Error en Google Forms";
+            resultObj.errors.forms = formsResult.message || "Error en Google Forms";
+            Logger.log("✗ Google Forms falló: " + resultObj.errors.forms);
+          } else {
+            Logger.log("✓ Google Forms exitoso");
           }
         } catch (formError) {
-          resultObj.success = false;
           resultObj.destinations.forms = false;
           resultObj.errors.forms = "Error en Google Forms: " + formError.message;
-          Logger.log("Error al enviar a Google Forms: " + formError.toString());
+          Logger.log("✗ Error al enviar a Google Forms: " + formError.toString());
         }
       } else {
-        resultObj.destinations.forms = true; // Ya fue enviado anteriormente
-      }
-      
+        Logger.log("✓ Google Forms ya fue enviado anteriormente - saltando");
+        resultObj.destinations.forms = true;
+      }      
       // ---- Bitrix24 ----
       if (!previousStatus.bitrix) {
+        Logger.log("→ Intentando envío a Bitrix24...");
+        resultObj.newAttempts.bitrix = true;
         try {
           const bitrixResult = sendDataToBitrix(formData, formData.concatenatedCheckboxes);
           resultObj.destinations.bitrix = bitrixResult.success;
           if (!bitrixResult.success) {
-            resultObj.success = false;
             resultObj.errors.bitrix = bitrixResult.message || "Error en Bitrix";
+            Logger.log("✗ Bitrix24 falló: " + resultObj.errors.bitrix);
+          } else {
+            Logger.log("✓ Bitrix24 exitoso");
           }
         } catch (bitrixError) {
-          resultObj.success = false;
           resultObj.destinations.bitrix = false;
           resultObj.errors.bitrix = "Error en Bitrix: " + bitrixError.message;
-          Logger.log("Error al enviar a Bitrix: " + bitrixError.toString());
+          Logger.log("✗ Error al enviar a Bitrix: " + bitrixError.toString());
         }
       } else {
-        resultObj.destinations.bitrix = true; // Ya fue enviado anteriormente
+        Logger.log("✓ Bitrix24 ya fue enviado anteriormente - saltando");
+        resultObj.destinations.bitrix = true;
       }
       
       // ---- Wazzup ----
       if (!previousStatus.wazzup) {
-        try {
-          const wazzupResult = sendWazzupMessage(
+        Logger.log("→ Intentando envío a Wazzup...");
+        resultObj.newAttempts.wazzup = true;
+        try {          const wazzupResult = sendWazzupMessage(
             formData.telefono,
             formData.nombre,
             formData.comercialAsignado,
@@ -1033,40 +1208,77 @@ function processOfflineData(formDataArray) {
             formData.concatenatedCheckboxes,
             formData.comentarios,
             formData.operadorApp,
-            formData.empresaOperador
+            formData.empresaOperador,
+            formData.pais
           );
           resultObj.destinations.wazzup = wazzupResult.success;
           if (!wazzupResult.success) {
-            resultObj.success = false;
             resultObj.errors.wazzup = wazzupResult.message || "Error en Wazzup";
+            Logger.log("✗ Wazzup falló: " + resultObj.errors.wazzup);
+          } else {
+            Logger.log("✓ Wazzup exitoso");
           }
         } catch (wazzupError) {
-          resultObj.success = false;
           resultObj.destinations.wazzup = false;
           resultObj.errors.wazzup = "Error en Wazzup: " + wazzupError.message;
-          Logger.log("Error al enviar a Wazzup: " + wazzupError.toString());
+          Logger.log("✗ Error al enviar a Wazzup: " + wazzupError.toString());
         }
       } else {
-        resultObj.destinations.wazzup = true; // Ya fue enviado anteriormente
+        Logger.log("✓ Wazzup ya fue enviado anteriormente - saltando");
+        resultObj.destinations.wazzup = true;
       }
-      
-      // ---- Odoo ----
+        // ---- Odoo ----
       if (!previousStatus.odoo) {
+        Logger.log("→ Intentando envío a Odoo...");
+        resultObj.newAttempts.odoo = true;
         try {
           const odooResult = createOdooLead(formData);
           resultObj.destinations.odoo = odooResult.success;
           if (!odooResult.success) {
-            resultObj.success = false;
             resultObj.errors.odoo = odooResult.error || "Error en Odoo";
+            Logger.log("✗ Odoo falló: " + resultObj.errors.odoo);
+            
+            // Si es un duplicado según la respuesta del servidor, lo consideramos como exitoso para evitar reintentos infinitos
+            if (odooResult.isDuplicate) {
+              Logger.log("↺ Duplicado detectado por servidor - marcando como exitoso para evitar reintentos");
+              resultObj.destinations.odoo = true;
+              resultObj.errors.odoo = `Duplicado según servidor: ${odooResult.error}`;
+            }
+          } else {
+            Logger.log("✓ Odoo exitoso - Lead ID: " + (odooResult.lead_id || 'N/A'));
           }
         } catch (odooError) {
-          resultObj.success = false;
           resultObj.destinations.odoo = false;
           resultObj.errors.odoo = "Error en Odoo: " + odooError.message;
-          Logger.log("Error al enviar a Odoo: " + odooError.toString());
+          Logger.log("✗ Error al enviar a Odoo: " + odooError.toString());
         }
       } else {
-        resultObj.destinations.odoo = true; // Ya fue enviado anteriormente
+        Logger.log("✓ Odoo ya fue enviado anteriormente - saltando");
+        resultObj.destinations.odoo = true;
+      }      
+      // Determinar si el formulario fue completamente exitoso
+      // Solo falla si algún destino que se intentó enviar falló
+      const anyFailedDestination = !resultObj.destinations.forms || 
+                                   !resultObj.destinations.bitrix || 
+                                   !resultObj.destinations.wazzup || 
+                                   !resultObj.destinations.odoo;
+      
+      resultObj.success = !anyFailedDestination;
+      
+      // Log del resumen del resultado
+      Logger.log(`\n--- RESUMEN FORMULARIO ${formData.timestamp} ---`);
+      Logger.log(`Éxito general: ${resultObj.success ? '✓' : '✗'}`);
+      Logger.log(`Estados finales:`);
+      Logger.log(`  • Google Forms: ${resultObj.destinations.forms ? '✓' : '✗'} ${resultObj.newAttempts.forms ? '(nuevo intento)' : '(estado previo)'}`);
+      Logger.log(`  • Bitrix24: ${resultObj.destinations.bitrix ? '✓' : '✗'} ${resultObj.newAttempts.bitrix ? '(nuevo intento)' : '(estado previo)'}`);
+      Logger.log(`  • WhatsApp: ${resultObj.destinations.wazzup ? '✓' : '✗'} ${resultObj.newAttempts.wazzup ? '(nuevo intento)' : '(estado previo)'}`);
+      Logger.log(`  • Odoo: ${resultObj.destinations.odoo ? '✓' : '✗'} ${resultObj.newAttempts.odoo ? '(nuevo intento)' : '(estado previo)'}`);
+      
+      if (Object.keys(resultObj.errors).length > 0) {
+        Logger.log(`Errores reportados:`);
+        Object.keys(resultObj.errors).forEach(dest => {
+          Logger.log(`  • ${dest}: ${resultObj.errors[dest]}`);
+        });
       }
       
       // Registrar el resultado
@@ -1074,14 +1286,332 @@ function processOfflineData(formDataArray) {
       
     } catch (generalError) {
       // Error general no capturado en ningún bloque específico
+      Logger.log(`\n✗ ERROR GENERAL procesando formulario ${formData.timestamp}: ${generalError.toString()}`);
       results.push({
         id: formData.timestamp,
         success: false,
         errors: { general: generalError.message || "Error desconocido al procesar el formulario" },
-        destinations: { forms: false, bitrix: false, wazzup: false, odoo: false }
+        destinations: { forms: false, bitrix: false, wazzup: false, odoo: false },
+        newAttempts: { forms: true, bitrix: true, wazzup: true, odoo: true }
       });
     }
   }
   
+  // Resumen final
+  const successCount = results.filter(r => r.success).length;
+  const partialCount = results.filter(r => !r.success && (r.destinations.forms || r.destinations.bitrix || r.destinations.wazzup || r.destinations.odoo)).length;
+  const failedCount = results.filter(r => !r.success && !r.destinations.forms && !r.destinations.bitrix && !r.destinations.wazzup && !r.destinations.odoo).length;
+  
+  Logger.log(`\n=== RESUMEN FINAL DEL PROCESAMIENTO ===`);
+  Logger.log(`Total procesados: ${results.length}`);
+  Logger.log(`Completamente exitosos: ${successCount}`);
+  Logger.log(`Parcialmente exitosos: ${partialCount}`);
+  Logger.log(`Completamente fallidos: ${failedCount}`);
+  
   return results;
+}
+
+// Función de test para validar la búsqueda de campañas por evento
+function testCampaignSearch() {
+  try {
+    Logger.log("=== INICIANDO TEST DE BÚSQUEDA DE CAMPAÑAS ===");
+    
+    // Configuración de Odoo
+    const odooUrl = "https://dye.quilsoft.com";
+    const db = "dye_prod";
+    const login = "maused@dyesa.com";
+    const password = "967ce27624f6e6bfdf1b674efcbc2fda5603796e";
+    
+    // Autenticación en Odoo
+    const uid = xmlrpcLogin(odooUrl, db, login, password);
+    Logger.log("Autenticación exitosa en Odoo con UID: " + uid);
+    
+    // Test con diferentes nombres de eventos
+    const testEvents = [
+      "Agroactiva 2025",
+      "AgroActiva 2025", 
+      "Event Test",
+      "Feria de Tecnología Agrícola"
+    ];
+    
+    testEvents.forEach(eventName => {
+      Logger.log(`\n--- Testing evento: "${eventName}" ---`);
+      const campaignId = getCampaignId(odooUrl, db, uid, password, eventName);
+      if (campaignId) {
+        Logger.log(`✓ Campaña encontrada/creada para "${eventName}" con ID: ${campaignId}`);
+      } else {
+        Logger.log(`✗ No se pudo crear/encontrar campaña para "${eventName}"`);
+      }
+    });
+    
+    Logger.log("\n=== TEST DE CAMPAÑAS COMPLETADO ===");
+    return { success: true, message: "Test completado correctamente" };
+    
+  } catch (error) {
+    Logger.log("Error en test de campañas: " + error.toString());
+    return { success: false, error: error.message };
+  }
+}
+
+// Función de test para validar el sistema de reintentos separados
+function testRetrySystem() {
+  Logger.log("=== INICIANDO TEST COMPLETO DE SISTEMA DE REINTENTOS ===");
+  
+  // Test 1: Formulario completamente nuevo (todos los destinos deben intentarse)
+  Logger.log("\n--- TEST 1: FORMULARIO NUEVO ---");
+  const testFormData1 = {
+    timestamp: new Date().toISOString(),
+    nombre: "Test",
+    apellido: "Usuario",
+    telefono: "1234567890",
+    mail: "test@test.com",
+    localidad: "Buenos Aires",
+    provincia: "Buenos Aires",
+    pais: "Argentina",
+    evento: "Test Event",
+    concatenatedCheckboxes: "Test Vertical",
+    operadorApp: "Test Operator",
+    empresaOperador: "Test Company",
+    comercialAsignado: "Test Commercial"
+  };
+  
+  Logger.log("Test con formulario completamente nuevo - todos los destinos deben intentarse");
+  const results1 = processOfflineData([testFormData1]);
+  Logger.log("Resultado del test 1:");
+  Logger.log(JSON.stringify(results1[0], null, 2));
+  
+  // Test 2: Formulario con algunos destinos ya exitosos
+  Logger.log("\n--- TEST 2: FORMULARIO CON DESTINOS PARCIALES ---");
+  const testFormData2 = {
+    timestamp: new Date().toISOString(),
+    nombre: "Test2",
+    apellido: "Usuario2",
+    telefono: "0987654321",
+    mail: "test2@test.com",
+    localidad: "Córdoba",
+    provincia: "Córdoba",
+    pais: "Argentina",
+    evento: "Test Event 2",
+    concatenatedCheckboxes: "Test Vertical 2",
+    operadorApp: "Test Operator 2",
+    empresaOperador: "Test Company 2",
+    comercialAsignado: "Test Commercial 2",
+    destinations: {
+      forms: true,   // Ya fue enviado exitosamente
+      bitrix: false, // Falló anteriormente
+      wazzup: false, // Falló anteriormente  
+      odoo: true     // Ya fue enviado exitosamente
+    }
+  };
+  
+  Logger.log("Test con destinos parcialmente completados:");
+  Logger.log("✓ Google Forms (exitoso anterior) ✗ Bitrix24 (falló anterior) ✗ WhatsApp (falló anterior) ✓ Odoo (exitoso anterior)");
+  Logger.log("Solo Bitrix24 y WhatsApp deben intentarse");
+  
+  const results2 = processOfflineData([testFormData2]);
+  Logger.log("Resultado del test 2:");
+  Logger.log(JSON.stringify(results2[0], null, 2));
+  
+  // Test 3: Formulario ya completamente exitoso
+  Logger.log("\n--- TEST 3: FORMULARIO COMPLETAMENTE EXITOSO ---");
+  const testFormData3 = {
+    timestamp: new Date().toISOString(),
+    nombre: "Test3",
+    apellido: "Usuario3",
+    telefono: "1122334455",
+    mail: "test3@test.com",
+    localidad: "Rosario",
+    provincia: "Santa Fe",
+    pais: "Argentina",
+    evento: "Test Event 3",
+    concatenatedCheckboxes: "Test Vertical 3",
+    destinations: {
+      forms: true,   // Ya fue enviado exitosamente
+      bitrix: true,  // Ya fue enviado exitosamente
+      wazzup: true,  // Ya fue enviado exitosamente
+      odoo: true     // Ya fue enviado exitosamente
+    }
+  };
+  
+  Logger.log("Test con todos los destinos ya exitosos - ningún destino debe intentarse");
+  const results3 = processOfflineData([testFormData3]);
+  Logger.log("Resultado del test 3:");
+  Logger.log(JSON.stringify(results3[0], null, 2));
+  
+  Logger.log("\n=== TEST DE REINTENTOS COMPLETADO ===");
+  Logger.log("Verificar que:");
+  Logger.log("- Test 1: Se intentaron todos los destinos");
+  Logger.log("- Test 2: Solo se intentaron Bitrix24 y WhatsApp");
+  Logger.log("- Test 3: No se intentó ningún destino");
+  
+  return [results1, results2, results3];
+}
+
+// Función helper para debugging - mostrar estado actual de formularios offline
+function debugOfflineQueue() {
+  Logger.log("=== ESTADO ACTUAL DE LA COLA OFFLINE ===");
+  
+  try {
+    // Esta función debe ser llamada desde el frontend con offlineStorage.forms
+    // Aquí solo proveemos la estructura para logging del backend
+    Logger.log("Para ver el estado actual de la cola offline:");
+    Logger.log("1. Abrir DevTools en el navegador (F12)");
+    Logger.log("2. En la consola, ejecutar: console.log('Formularios offline:', offlineStorage.forms)");
+    Logger.log("3. Para ver estadísticas: console.log('Stats:', stats)");
+    Logger.log("4. Para forzar sincronización: offlineStorage.syncForms()");
+    
+    return {
+      message: "Para debugging, usar DevTools del navegador",
+      instructions: [
+        "F12 para abrir DevTools",
+        "console.log('Formularios offline:', offlineStorage.forms)",
+        "console.log('Stats:', stats)",
+        "offlineStorage.syncForms() para forzar sync"
+      ]
+    };
+  } catch (error) {
+    Logger.log("Error en debugOfflineQueue: " + error.toString());
+    return { error: error.message };
+  }
+}
+
+// Función para limpiar logs antiguos y optimizar rendimiento
+function cleanOldLogs() {
+  Logger.log("=== LIMPIEZA DE LOGS ANTIGUOS ===");
+  Logger.log("Los logs de Google Apps Script se limpian automáticamente después de un tiempo.");
+  Logger.log("Para logs más permanentes, considerar usar Google Sheets como log.");
+  return { message: "Limpieza iniciada - los logs se gestionan automáticamente" };
+}
+
+// Función de prueba para verificar el nuevo manejo de duplicados en Odoo
+function testSimplifiedOdooDuplicateHandling() {
+  Logger.log("=== PRUEBA DEL MANEJO SIMPLIFICADO DE DUPLICADOS EN ODOO ===");
+  
+  // Datos de prueba - usar datos que probablemente ya existen en Odoo
+  const testFormData = {
+    nombre: "Test",
+    apellido: "Duplicado",
+    telefono: "+5491123456789",
+    mail: "test.duplicado@ejemplo.com",
+    localidad: "Buenos Aires",
+    provincia: "Buenos Aires",
+    pais: "Argentina",
+    concatenatedCheckboxes: "Test de duplicado",
+    evento: "Test Event",
+    operadorApp: "Test Operator",
+    empresaOperador: "Test Company",
+    comercialAsignado: "Test Commercial",
+    timestamp: new Date().toISOString()
+  };
+  
+  Logger.log("Enviando datos de prueba para verificar manejo de duplicados...");
+  Logger.log(`Datos: ${testFormData.nombre} ${testFormData.apellido}, ${testFormData.mail}, ${testFormData.telefono}`);
+  
+  try {
+    // Primer envío
+    Logger.log("\n--- PRIMER ENVÍO ---");
+    const firstResult = createOdooLead(testFormData);
+    Logger.log(`Resultado primer envío: ${JSON.stringify(firstResult)}`);
+    
+    // Segundo envío (debería ser duplicado)
+    Logger.log("\n--- SEGUNDO ENVÍO (DEBERÍA SER DUPLICADO) ---");
+    const secondResult = createOdooLead(testFormData);
+    Logger.log(`Resultado segundo envío: ${JSON.stringify(secondResult)}`);
+    
+    // Análisis de resultados
+    Logger.log("\n--- ANÁLISIS DE RESULTADOS ---");
+    if (firstResult.success && secondResult.success) {
+      Logger.log("✓ Ambos envíos fueron exitosos - posiblemente Odoo permitió el duplicado");
+    } else if (firstResult.success && !secondResult.success) {
+      if (secondResult.isDuplicate) {
+        Logger.log("✓ Manejo correcto: Primer envío exitoso, segundo identificado como duplicado");
+      } else {
+        Logger.log("⚠ Segundo envío falló pero no fue identificado como duplicado");
+      }
+    } else if (!firstResult.success && !secondResult.success) {
+      Logger.log("✗ Ambos envíos fallaron - revisar configuración");
+    }
+    
+    return {
+      firstResult: firstResult,
+      secondResult: secondResult,
+      message: "Prueba completada - revisar logs para detalles"
+    };
+    
+  } catch (error) {
+    Logger.log("Error durante la prueba: " + error.toString());
+    return {
+      error: error.message,
+      message: "Prueba falló debido a error"
+    };
+  }
+}
+
+// Función para formatear números de teléfono según el país
+function formatPhoneByCountry(phone, country) {
+  // Eliminar caracteres no numéricos
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Normalizar el nombre del país
+  const normalizedCountry = country ? country.trim().toLowerCase() : 'argentina';
+  
+  // Prefijos por país
+  const countryPrefixes = {
+    'argentina': '549',
+    'paraguay': '595',
+    'uruguay': '598'
+  };
+  
+  const prefix = countryPrefixes[normalizedCountry] || '549'; // Argentina por defecto
+  
+  // Si el número ya tiene el prefijo, devolverlo como está
+  if (cleanPhone.startsWith(prefix)) {
+    return cleanPhone;
+  }
+  
+  // Agregar el prefijo correspondiente
+  return `${prefix}${cleanPhone}`;
+}
+
+// Función de test para validar el sistema de validación de teléfonos por país
+function testPhoneValidationByCountry() {
+  Logger.log("=== INICIANDO TEST DE VALIDACIÓN DE TELÉFONOS POR PAÍS ===");
+  
+  // Test casos válidos
+  Logger.log("\n--- TEST DE CASOS VÁLIDOS ---");
+  
+  // Argentina: exactamente 10 dígitos
+  const argentinianPhone = "1123456789";
+  const formattedArgentinian = formatPhoneByCountry(argentinianPhone, "Argentina");
+  Logger.log(`Argentina - Entrada: ${argentinianPhone}, Salida: ${formattedArgentinian}, Esperado: 5491123456789`);
+  
+  // Paraguay: mínimo 9 dígitos
+  const paraguayanPhone = "987654321";
+  const formattedParaguayan = formatPhoneByCountry(paraguayanPhone, "Paraguay");
+  Logger.log(`Paraguay - Entrada: ${paraguayanPhone}, Salida: ${formattedParaguayan}, Esperado: 595987654321`);
+  
+  // Uruguay: mínimo 8 dígitos
+  const uruguayanPhone = "98765432";
+  const formattedUruguayan = formatPhoneByCountry(uruguayanPhone, "Uruguay");
+  Logger.log(`Uruguay - Entrada: ${uruguayanPhone}, Salida: ${formattedUruguayan}, Esperado: 59898765432`);
+  
+  // Test con números que ya tienen prefijo
+  Logger.log("\n--- TEST CON PREFIJOS EXISTENTES ---");
+  const phoneWithPrefix = "5491123456789";
+  const formattedWithPrefix = formatPhoneByCountry(phoneWithPrefix, "Argentina");
+  Logger.log(`Con prefijo - Entrada: ${phoneWithPrefix}, Salida: ${formattedWithPrefix}, Esperado: 5491123456789`);
+  
+  // Test casos por defecto
+  Logger.log("\n--- TEST CASOS POR DEFECTO ---");
+  const unknownCountryPhone = "1123456789";
+  const formattedUnknown = formatPhoneByCountry(unknownCountryPhone, "Brasil");
+  Logger.log(`País desconocido - Entrada: ${unknownCountryPhone}, Salida: ${formattedUnknown}, Esperado: 5491123456789 (Argentina por defecto)`);
+  
+  Logger.log("\n=== TEST DE VALIDACIÓN DE TELÉFONOS COMPLETADO ===");
+  Logger.log("Verificar que:");
+  Logger.log("- Argentina: se agrega prefijo 549");
+  Logger.log("- Paraguay: se agrega prefijo 595");
+  Logger.log("- Uruguay: se agrega prefijo 598");
+  Logger.log("- Países desconocidos: usan Argentina (549) por defecto");
+  Logger.log("- Números con prefijo existente: no se duplican");
 }

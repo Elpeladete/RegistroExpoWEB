@@ -631,6 +631,17 @@
         bottom: 20px;
       }
     }
+
+    /* Estilos para validación de teléfono */
+    .phone-valid {
+      border-color: #28a745 !important;
+      background-color: #f8fff9 !important;
+    }
+
+    .phone-invalid {
+      border-color: #dc3545 !important;
+      background-color: #fff8f8 !important;
+    }
   </style>
 
   </head>
@@ -642,14 +653,13 @@
     </div>
 
     <h1>Registro de visitas</h1>
-    <h2><i>RegistroExpoWEB</i></h2>
-
-    <form id="prospectForm">
+    <h2><i>RegistroExpoWEB</i></h2>    <form id="prospectForm">
       <input type="hidden" id="telefonoComercial" name="telefonoComercial">
       <input type="hidden" id="mailComercial" name="mailComercial">
       <input type="hidden" id="empresa" name="empresa">
       <input type="hidden" id="bitrixId" name="bitrixId">
       <input type="hidden" id="selectedCheckboxes" name="selectedCheckboxes">
+      <input type="hidden" id="pais" name="pais">
       
 
       <label for="apellido">Apellido:</label>
@@ -666,7 +676,7 @@
       <input type="text" id="provincia" name="provincia" required>
 
       <label for="telefono">Teléfono:</label>
-      <input type="tel" id="telefono" name="telefono" required placeholder="Ingrese el número del visitante sin el +54 9 ni el 15 ni guiones ni espacios, sólo 10 números">
+      <input type="tel" id="telefono" name="telefono" required placeholder="Argentina: 10 dígitos (sin +549) | Paraguay: min 9 dígitos (sin +595) | Uruguay: min 8 dígitos (sin +598)">
 
       <label for="mail">Mail:</label>
       <input type="email" id="mail" name="mail" placeholder="Ingrese correo electrónico del visitante">
@@ -749,7 +759,7 @@
       </div>
 
       <label for="evento">Evento:</label>
-      <input type="text" id="evento" name="evento" value="ExpoAgro 2025">
+      <input type="text" id="evento" name="evento" value="Agroactiva 2025">
 
       <button type="submit">Enviar</button>
       <p id="statusMessage"></p>
@@ -848,9 +858,7 @@
           console.error('Error inicializando almacenamiento:', error);
           this.forms = [];
         }
-      },
-
-      async saveForm(formData) {
+      },      async saveForm(formData) {
         try {
           // Limpiar formularios antiguos si es necesario
           this.cleanExpiredForms();
@@ -867,8 +875,17 @@
             id: Date.now(),
             timestamp: new Date().toISOString(),
             retryCount: 0,
-            status: 'pending'
+            status: 'pending',
+            destinations: formData.destinations || { // Preservar destinos existentes o inicializar
+              forms: false,
+              bitrix: false,
+              wazzup: false,
+              odoo: false
+            }
           };
+
+          // Log para debugging
+          console.log('Guardando formulario con destinos:', newForm.destinations);
 
           this.forms.push(newForm);
           await this.persistForms();
@@ -882,9 +899,7 @@
           console.error('Error guardando formulario:', error);
           return false;
         }
-      },
-
-      async syncForms() {
+      },      async syncForms() {
         if (!navigator.onLine || this.forms.length === 0) return;
 
         console.log(`Iniciando sincronización de ${this.forms.length} formularios`);
@@ -898,27 +913,78 @@
           try {
             const result = await this.sendForm(form);
             
-            if (result.success) {
-              form.status = 'synced';
-              stats.sent++;
-              stats.pending--;
-              this.forms.splice(i, 1);
-              await this.persistForms();
-              updateStats();
-              showAlert(`Formulario sincronizado correctamente`, "success");
-            } else {
-              form.retryCount = (form.retryCount || 0) + 1;
-              if (form.retryCount >= CONFIG.RETRY_LIMIT) {
-                this.forms.splice(i, 1);
-                stats.pending--;
-                updateStats();
-                showAlert(`Formulario descartado después de ${CONFIG.RETRY_LIMIT} intentos`, "warning");
+            if (result && result.length > 0) {
+              const formResult = result[0]; // Tomar el primer resultado (solo enviamos un formulario)
+              
+              // Actualizar el estado de destinos en el formulario local
+              if (formResult.destinations) {
+                form.destinations = { ...form.destinations, ...formResult.destinations };
               }
-              await this.persistForms();
+              
+              // Log detallado del resultado
+              console.log(`Resultado para formulario ${form.id}:`, formResult);
+              console.log(`Destinos actuales:`, form.destinations);
+              
+              if (formResult.success) {
+                // Formulario completamente exitoso
+                form.status = 'synced';
+                stats.sent++;
+                stats.pending--;
+                this.forms.splice(i, 1);
+                await this.persistForms();
+                updateStats();
+                showAlert(`Formulario sincronizado correctamente`, "success");
+              } else {
+                // Algunos destinos fallaron, pero preservamos los exitosos
+                form.retryCount = (form.retryCount || 0) + 1;
+                
+                // Verificar si todos los destinos están completos
+                const allDestinationsComplete = form.destinations && 
+                  form.destinations.forms && 
+                  form.destinations.bitrix && 
+                  form.destinations.wazzup && 
+                  form.destinations.odoo;
+                
+                if (allDestinationsComplete) {
+                  // Todos los destinos están completos, marcar como sincronizado
+                  form.status = 'synced';
+                  stats.sent++;
+                  stats.pending--;
+                  this.forms.splice(i, 1);
+                  showAlert(`Formulario sincronizado completamente`, "success");
+                } else if (form.retryCount >= CONFIG.RETRY_LIMIT) {
+                  // Alcanzó el límite de reintentos
+                  this.forms.splice(i, 1);
+                  stats.pending--;
+                  updateStats();
+                  showAlert(`Formulario descartado después de ${CONFIG.RETRY_LIMIT} intentos. Algunos destinos pueden haber fallado.`, "warning");
+                } else {
+                  // Continuar intentando en el próximo ciclo
+                  const failedDestinations = [];
+                  if (!form.destinations?.forms) failedDestinations.push('Google Forms');
+                  if (!form.destinations?.bitrix) failedDestinations.push('Bitrix24');
+                  if (!form.destinations?.wazzup) failedDestinations.push('WhatsApp');
+                  if (!form.destinations?.odoo) failedDestinations.push('Odoo');
+                  
+                  showAlert(`Reintentando formulario. Pendientes: ${failedDestinations.join(', ')}`, "warning");
+                }
+                
+                await this.persistForms();
+              }
+            } else {
+              throw new Error("Respuesta inválida del servidor");
             }
           } catch (error) {
             console.error('Error sincronizando formulario:', error);
             form.retryCount = (form.retryCount || 0) + 1;
+            
+            if (form.retryCount >= CONFIG.RETRY_LIMIT) {
+              this.forms.splice(i, 1);
+              stats.pending--;
+              updateStats();
+              showAlert(`Formulario descartado por errores de conexión`, "warning");
+            }
+            
             await this.persistForms();
           }
 
@@ -1052,13 +1118,19 @@
         localidadInput.addEventListener("input", (e) => {
           showSuggestions(e.target.value);
         });
-      }
-
-      // Event listener para el comercial asignado
+      }      // Event listener para el comercial asignado
       const comercialSelect = document.getElementById("comercialAsignado");
       if (comercialSelect) {
         comercialSelect.addEventListener("change", (e) => {
           updateComercialData(e.target.value);
+        });
+      }
+
+      // Event listener para validación en tiempo real del teléfono
+      const telefonoInput = document.getElementById("telefono");
+      if (telefonoInput) {
+        telefonoInput.addEventListener("input", (e) => {
+          validatePhoneRealTime();
         });
       }
 
@@ -1261,11 +1333,14 @@
 
         filteredLocalidades.forEach((item) => {
           const suggestion = document.createElement("div");
-          suggestion.textContent = `${item.Municipio} (${item.Provincia})`;
-          suggestion.onclick = () => {
+          suggestion.textContent = `${item.Municipio} (${item.Provincia})`;          suggestion.onclick = () => {
             document.getElementById("localidad").value = item.Municipio;
             document.getElementById("provincia").value = item.Provincia;
+            document.getElementById("pais").value = item.Pais; // Capturar el país desde el CSV
             suggestionsDiv.style.display = "none";
+            
+            // Actualizar placeholder y validación de teléfono según el país
+            updatePhonePlaceholder();
             
             // Asignar comercial basado en la regional
             asignarComercialPorRegional(item.Regional);
@@ -1348,11 +1423,11 @@
       }
 
       // Obtener los datos del formulario
-      const formData = {
-        apellido: document.getElementById("apellido").value.trim(),
+      const formData = {        apellido: document.getElementById("apellido").value.trim(),
         nombre: document.getElementById("nombre").value.trim(),
         localidad: document.getElementById("localidad").value.trim(),
         provincia: document.getElementById("provincia").value.trim(),
+        pais: document.getElementById("pais").value.trim(),
         telefono: document.getElementById("telefono").value.trim(),
         mail: document.getElementById("mail").value.trim(),
         verticales: document.getElementById("verticales").value.trim(),
@@ -1369,17 +1444,14 @@
         evento: document.getElementById("evento").value.trim(),
         concatenatedCheckboxes: checkboxStates.concatenated,
         ...checkboxStates.data
-      };
-
-      // Validar el número de teléfono
-      if (formData.telefono.length < 10 || formData.telefono.length > 11) {
-        showAlert("Por favor, ingresa un número de teléfono válido.", "warning");
+      };      // Validar el número de teléfono por país
+      const phoneValidation = validatePhoneByCountry(formData.telefono, formData.pais);
+      if (!phoneValidation.valid) {
+        showAlert(phoneValidation.message, "warning");
         return;
       }
 
-      showAlert("Procesando formulario...", "warning");
-
-      try {
+      showAlert("Procesando formulario...", "warning");      try {
         if (navigator.onLine) {
           // Intentar enviar directamente si hay conexión
           const result = await new Promise((resolve, reject) => {
@@ -1389,13 +1461,50 @@
               .processOfflineData([formData]);
           });
 
-          if (result && result[0] && result[0].success) {
-            showAlert("Datos enviados correctamente.", "success");
-            stats.sent++;
-            updateStats();
-            resetForm();
+          if (result && result[0]) {
+            const resultData = result[0];
+            
+            if (resultData.success) {
+              // Formulario completamente exitoso
+              showAlert("Datos enviados correctamente.", "success");
+              stats.sent++;
+              updateStats();
+              resetForm();
+            } else {
+              // Envío parcialmente exitoso - preservar destinos exitosos para reintentos
+              console.log("Envío parcialmente exitoso. Destinos completados:", resultData.destinations);
+              
+              // Verificar si al menos un destino fue exitoso
+              const hasSuccessfulDestinations = resultData.destinations && 
+                (resultData.destinations.forms || resultData.destinations.bitrix || 
+                 resultData.destinations.wazzup || resultData.destinations.odoo);
+              
+              if (hasSuccessfulDestinations) {
+                // Actualizar formData con los estados de destinos exitosos
+                formData.destinations = resultData.destinations;
+                
+                // Contar destinos fallidos para mostrar mensaje apropiado
+                const failedDestinations = [];
+                if (!resultData.destinations.forms) failedDestinations.push('Google Forms');
+                if (!resultData.destinations.bitrix) failedDestinations.push('Bitrix24');
+                if (!resultData.destinations.wazzup) failedDestinations.push('WhatsApp');
+                if (!resultData.destinations.odoo) failedDestinations.push('Odoo');
+                
+                showAlert(`Enviado parcialmente. Se reintentarán: ${failedDestinations.join(', ')}`, "warning");
+              } else {
+                showAlert("Error al enviar a todos los destinos. Se reintentará completamente.", "warning");
+              }
+              
+              // Guardar con los estados de destinos preservados
+              const saved = await offlineStorage.saveForm(formData);
+              if (saved) {
+                resetForm();
+              } else {
+                throw new Error("Error al guardar el formulario offline");
+              }
+            }
           } else {
-            throw new Error(result[0]?.errors?.general || "Error al enviar datos");
+            throw new Error("Respuesta inválida del servidor");
           }
         } else {
           // Guardar offline si no hay conexión
@@ -1434,6 +1543,260 @@
       operadorApp.value = currentOperador;
       empresaOperador.value = currentEmpresa;
     }
+
+    // Función para mostrar información detallada de los formularios pendientes
+    function showPendingFormsDetails() {
+      if (!offlineStorage.forms || offlineStorage.forms.length === 0) {
+        console.log("No hay formularios pendientes");
+        return;
+      }
+      
+      console.log(`=== FORMULARIOS PENDIENTES (${offlineStorage.forms.length}) ===`);
+      
+      offlineStorage.forms.forEach((form, index) => {
+        console.log(`\n--- Formulario ${index + 1} ---`);
+        console.log(`ID: ${form.id}`);
+        console.log(`Timestamp: ${form.timestamp}`);
+        console.log(`Nombre: ${form.nombre} ${form.apellido}`);
+        console.log(`Email: ${form.mail}`);
+        console.log(`Teléfono: ${form.telefono}`);
+        console.log(`Reintentos: ${form.retryCount || 0}`);
+        console.log(`Estado: ${form.status || 'pending'}`);
+        
+        if (form.destinations) {
+          console.log("Estados de destinos:");
+          console.log(`  • Google Forms: ${form.destinations.forms ? '✓' : '✗'}`);
+          console.log(`  • Bitrix24: ${form.destinations.bitrix ? '✓' : '✗'}`);
+          console.log(`  • WhatsApp: ${form.destinations.wazzup ? '✓' : '✗'}`);
+          console.log(`  • Odoo: ${form.destinations.odoo ? '✓' : '✗'}`);
+          
+          const pendingDestinations = [];
+          if (!form.destinations.forms) pendingDestinations.push('Google Forms');
+          if (!form.destinations.bitrix) pendingDestinations.push('Bitrix24');
+          if (!form.destinations.wazzup) pendingDestinations.push('WhatsApp');
+          if (!form.destinations.odoo) pendingDestinations.push('Odoo');
+          
+          if (pendingDestinations.length > 0) {
+            console.log(`  Pendientes: ${pendingDestinations.join(', ')}`);
+          } else {
+            console.log(`  ¡Todos los destinos completados!`);
+          }
+        }
+      });
+    }
+    
+    // Función para depurar un formulario específico
+    function debugForm(formId) {
+      const form = offlineStorage.forms.find(f => f.id === formId);
+      if (!form) {
+        console.log(`No se encontró formulario con ID: ${formId}`);
+        return;
+      }
+      
+      console.log("=== DEBUGGING FORMULARIO ===");
+      console.log(JSON.stringify(form, null, 2));
+      
+      return form;
+    }
+    
+    // Función para forzar el reintento de un formulario específico
+    async function retrySpecificForm(formId) {
+      const form = offlineStorage.forms.find(f => f.id === formId);
+      if (!form) {
+        showAlert(`No se encontró formulario con ID: ${formId}`, "warning");
+        return;
+      }
+      
+      console.log(`Forzando reintento del formulario ${formId}...`);
+      
+      try {
+        const result = await offlineStorage.sendForm(form);
+        console.log("Resultado del reintento:", result);
+        
+        if (result && result[0]) {
+          const formResult = result[0];
+          if (formResult.destinations) {
+            form.destinations = { ...form.destinations, ...formResult.destinations };
+          }
+          
+          const allComplete = form.destinations.forms && form.destinations.bitrix && 
+                            form.destinations.wazzup && form.destinations.odoo;
+          
+          if (allComplete) {
+            showAlert("Formulario completado exitosamente", "success");
+            const index = offlineStorage.forms.indexOf(form);
+            offlineStorage.forms.splice(index, 1);
+            stats.pending--;
+            stats.sent++;
+          } else {
+            showAlert("Reintento parcialmente exitoso", "warning");
+          }
+          
+          await offlineStorage.persistForms();
+          updateStats();
+        }
+      } catch (error) {
+        console.error("Error en reintento forzado:", error);
+        showAlert("Error en el reintento forzado", "warning");
+      }
+    }
+    
+    // Exponer funciones de debugging al ámbito global para uso en DevTools
+    window.debugFunctions = {
+      showPendingFormsDetails,
+      debugForm,
+      retrySpecificForm,
+      forceSync: () => offlineStorage.syncForms(),
+      clearPendingForms: () => {
+        if (confirm("¿Estás seguro de que quieres limpiar todos los formularios pendientes?")) {
+          offlineStorage.forms = [];
+          offlineStorage.persistForms();
+          stats.pending = 0;
+          updateStats();
+          showAlert("Formularios pendientes limpiados", "success");
+        }
+      }
+    };
+
+    // Función para validar teléfonos por país
+    function validatePhoneByCountry(telefono, pais) {
+      // Normalizar el teléfono (solo números)
+      const cleanPhone = telefono.replace(/\D/g, '');
+      
+      // Normalizar el nombre del país
+      const normalizedCountry = pais ? pais.trim().toLowerCase() : '';
+      
+      // Validaciones por país
+      switch (normalizedCountry) {
+        case 'argentina':
+          // Argentina: exactamente 10 caracteres, sin +549
+          if (cleanPhone.length !== 10) {
+            return {
+              valid: false,
+              message: `Teléfono para Argentina debe tener exactamente 10 dígitos (sin +549). Ingresaste ${cleanPhone.length} dígitos.`
+            };
+          }
+          // Verificar que no tenga prefijo +549
+          if (cleanPhone.startsWith('549')) {
+            return {
+              valid: false,
+              message: "Para Argentina, ingresa el número sin el prefijo +549."
+            };
+          }
+          break;
+          
+        case 'paraguay':
+          // Paraguay: mínimo 9 caracteres, sin +595
+          if (cleanPhone.length < 9) {
+            return {
+              valid: false,
+              message: `Teléfono para Paraguay debe tener mínimo 9 dígitos (sin +595). Ingresaste ${cleanPhone.length} dígitos.`
+            };
+          }
+          // Verificar que no tenga prefijo +595
+          if (cleanPhone.startsWith('595')) {
+            return {
+              valid: false,
+              message: "Para Paraguay, ingresa el número sin el prefijo +595."
+            };
+          }
+          break;
+          
+        case 'uruguay':
+          // Uruguay: mínimo 8 caracteres, sin +598
+          if (cleanPhone.length < 8) {
+            return {
+              valid: false,
+              message: `Teléfono para Uruguay debe tener mínimo 8 dígitos (sin +598). Ingresaste ${cleanPhone.length} dígitos.`
+            };
+          }
+          // Verificar que no tenga prefijo +598
+          if (cleanPhone.startsWith('598')) {
+            return {
+              valid: false,
+              message: "Para Uruguay, ingresa el número sin el prefijo +598."
+            };
+          }
+          break;
+          
+        default:
+          // Para otros países o cuando no se detecta país, usar validación genérica
+          if (cleanPhone.length < 8 || cleanPhone.length > 15) {
+            return {
+              valid: false,
+              message: `Número de teléfono debe tener entre 8 y 15 dígitos. Ingresaste ${cleanPhone.length} dígitos.`
+            };
+          }
+          break;
+      }
+      
+      return { valid: true };
+    }
+
+    // Función para mostrar validación en tiempo real del teléfono
+    function validatePhoneRealTime() {
+      const telefonoInput = document.getElementById("telefono");
+      const paisInput = document.getElementById("pais");
+      
+      if (telefonoInput && paisInput) {
+        const telefono = telefonoInput.value.trim();
+        const pais = paisInput.value.trim();
+        
+        if (telefono.length > 0) {
+          const validation = validatePhoneByCountry(telefono, pais);
+          
+          // Remover clases anteriores
+          telefonoInput.classList.remove('phone-valid', 'phone-invalid');
+          
+          if (validation.valid) {
+            telefonoInput.classList.add('phone-valid');
+            telefonoInput.title = "✓ Número válido";
+          } else {
+            telefonoInput.classList.add('phone-invalid');
+            telefonoInput.title = validation.message;
+          }
+        } else {
+          telefonoInput.classList.remove('phone-valid', 'phone-invalid');
+          telefonoInput.title = "";
+        }
+      }
+    }
+
+    // Función para actualizar el placeholder del teléfono según el país seleccionado
+    function updatePhonePlaceholder() {
+      const telefonoInput = document.getElementById("telefono");
+      const paisInput = document.getElementById("pais");
+      
+      if (telefonoInput && paisInput) {
+        const pais = paisInput.value.trim().toLowerCase();
+        
+        let placeholder = "";
+        switch (pais) {
+          case 'argentina':
+            placeholder = "Ej: 1123456789 (exactamente 10 dígitos, sin +549)";
+            break;
+          case 'paraguay':
+            placeholder = "Ej: 987654321 (mínimo 9 dígitos, sin +595)";
+            break;
+          case 'uruguay':
+            placeholder = "Ej: 98765432 (mínimo 8 dígitos, sin +598)";
+            break;
+          default:
+            placeholder = "Argentina: 10 dígitos | Paraguay: min 9 dígitos | Uruguay: min 8 dígitos";
+            break;
+        }
+        
+        telefonoInput.placeholder = placeholder;
+        
+        // También validar en tiempo real cuando cambia el país
+        validatePhoneRealTime();
+      }
+    }
+
+    // Llamar a updatePhonePlaceholder al cargar la página para establecer el placeholder correcto
+    document.addEventListener('DOMContentLoaded', () => {
+      updatePhonePlaceholder();
+    });
   </script>
 </body>
 </html>
