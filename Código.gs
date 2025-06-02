@@ -134,6 +134,7 @@ function getBitrixID(comercialName) {
     "Facundo Pagani": "308",
     "Germán González": "6",
     "Ignacio Espinoza": "54",
+    "Ignacio Dauria": "1017",
     "Juan Manuel Silva": "1019",
     "Juan Martín Venencia": "28",
     "Luis Adrover": "1",
@@ -202,7 +203,7 @@ function sendWazzupMessage(phone, name, assignee, assigneePhone, leadLastName, l
     'weedSeeker': "https://i.ibb.co/svRLJc0/Weed-Seeker.jpg",
     'solucionSiembra': "https://i.ibb.co/dDVbr35/Siembra.jpg",
     'guiaAutoguia': "https://i.ibb.co/dGZVBZd/Autoguia.jpg",
-    'tapsSenales': "https://i.ibb.co/XSTN821/TAPs.jpg",
+    'tapsSenales': "https://i.ibb.co/LD45Q6JR/folletosenales-dye.png",
     'solucionPulverizacion': "https://i.ibb.co/BcnMsfX/Pulverizacion.jpg",
     'dronesDJI': "https://i.ibb.co/0mPx08M/DJI.jpg"
   };
@@ -298,7 +299,7 @@ function checkServerStatus() {
     return {
       status: "online",
       timestamp: new Date().toISOString(),
-      version: "V02R034.270525",
+      version: "V02R035.010625",
       maxBatchSize: 5,
       retryLimit: 3,
       syncInterval: 30000,
@@ -600,30 +601,37 @@ function xmlrpcExecute(url, db, uid, password, model, method, args) {
 function mapBitrixToOdooUserId(bitrixId) {
   // Este mapeo debe ajustarse según los usuarios reales en ambos sistemas
   const mapping = {
-    "1": 10,  // Luis Adrover
-    "8": 11,  // César Vigna
-    "486": 12, // Carlos Bermúdez
-    "54": 13,  // Ignacio Espinoza
-    "28": 15,  // Juan Martín Venencia
-    "16": 16,  // Ramiro Fernández
-    "20": 17,  // Roberto Catala
-    "1385": 21, // Matías Koller
-    "1755": 22, // Ailín Borracci
-    "1379": 23, // Matías Corradi
-    "6": 24,    // Germán González
-    "12": 25,   // Matías Aliaga
-    "6869": 26, // Camila Gorosito
-    "6855": 27, // Fernanda Frade
-    "58": 29,   // Joaquín Fernández
-    "6863": 30, // Ricardo Vicentín
-    "6867": 32, // Nicolás Scaramuzza
-    "464": 38,  // Adrián Cardinali
     "532": 40,  // Adilson Simch
-    "6871": 45, // Pablo Casas
+    "464": 38,  // Adrián Cardinali
+    "1141": 10,  // Andrés Hernández, asignado a Luis
+    "1755": 22, // Ailín Borracci
+    "6869": 26, // Camila Gorosito
+    "486": 12, // Carlos Bermúdez
+    "8": 11,  // César Vigna
+    "31": 31,  // Delfina Aguirre
+    "308": 53,   // Facundo Pagani
+    "6855": 27, // Fernanda Frade
+    "6": 24,    // Germán González
+    "35": 35,  // Ignacio Dáuria
+    "54": 13,  // Ignacio Espinoza
+    "58": 29,   // Joaquín Fernández
+    "4400": 44, // Jorgelina Wilhelm
+    "2800": 28,   // José Cesanelli
     "1019": 46, // Juan Manuel Silva
-    "1269": 48, // Renzo Bonavia
+    "28": 15,  // Juan Martín Venencia
+    "1": 10,  // Luis Adrover
+    "33": 33,  // Lucas Morichetti
     "1017": 51, // Martín Aused
-    "308": 53   // Facundo Pagani
+    "12": 25,   // Matías Aliaga
+    "1379": 23, // Matías Corradi
+    "1385": 21, // Matías Koller
+    "6867": 32, // Nicolás Scaramuzza
+    "6871": 45, // Pablo Casas
+    "16": 16,  // Ramiro Fernández
+    "5400": 54,  // Raúl Chebaia
+    "1269": 48, // Renzo Bonavia
+    "6863": 30, // Ricardo Vicentín
+    "20": 17  // Roberto Catala
   };
   
   return mapping[bitrixId] || 51; // Por defecto a Martín Aused si no hay mapeo
