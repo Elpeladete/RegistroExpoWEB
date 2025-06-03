@@ -655,54 +655,170 @@ function createOdooLead(formData) {
     // Preparar datos para el lead
     const nombreCompleto = formData.nombre + " " + formData.apellido;
     Logger.log(`Preparando datos para: ${nombreCompleto}, Email: ${formData.mail}, Teléfono: ${formData.telefono}`);
+      // Construir descripción con formato HTML estructurado y estilos CSS inline
+    let descripcion = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; padding: 20px; border-radius: 8px; line-height: 1.6;">
+      
+      <!-- Encabezado principal -->
+      <div style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h2 style="margin: 0; font-size: 18px; font-weight: bold;">📋 INFORMACIÓN DEL PROSPECTO</h2>
+        <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">Registro de lead desde RegistroExpoWEB</p>
+      </div>
+
+      <!-- Datos Personales -->
+      <div style="background-color: white; border-left: 4px solid #28a745; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #28a745; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          👤 <span style="margin-left: 8px;">DATOS PERSONALES</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Nombre completo:</td>
+            <td style="padding: 5px 0; color: #333;">${nombreCompleto}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Teléfono:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.telefono || 'No proporcionado'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Email:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.mail || 'No proporcionado'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Ubicación -->
+      <div style="background-color: white; border-left: 4px solid #17a2b8; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #17a2b8; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          📍 <span style="margin-left: 8px;">UBICACIÓN</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Localidad:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.localidad || 'No proporcionada'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Provincia:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.provincia || 'No proporcionada'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">País:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.pais || 'No proporcionado'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Intereses (Verticales) -->
+      <div style="background-color: white; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #e6a100; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          🎯 <span style="margin-left: 8px;">INTERESES (VERTICALES)</span>
+        </h3>
+        <div style="background-color: #fff8dc; padding: 10px; border-radius: 4px; border: 1px solid #ffc107;">
+          <strong style="color: #e6a100;">${formData.concatenatedCheckboxes || 'No especificados'}</strong>
+        </div>
+      </div>
+
+      <!-- Detalles Comerciales -->
+      <div style="background-color: white; border-left: 4px solid #6f42c1; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #6f42c1; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          💰 <span style="margin-left: 8px;">DETALLES COMERCIALES</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Comentarios:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.comentarios || 'Sin comentarios'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Monto Estimado:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.montoEstimado || 'No especificado'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Información del Evento -->
+      <div style="background-color: white; border-left: 4px solid #fd7e14; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #fd7e14; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          🎪 <span style="margin-left: 8px;">INFORMACIÓN DEL EVENTO</span>
+        </h3>
+        <div style="background-color: #fff4e6; padding: 10px; border-radius: 4px; border: 1px solid #fd7e14;">
+          <strong style="color: #fd7e14;">${formData.evento || 'No especificado'}</strong>
+        </div>
+      </div>
+
+      <!-- Información de Registro -->
+      <div style="background-color: white; border-left: 4px solid #20c997; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #20c997; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          📝 <span style="margin-left: 8px;">INFORMACIÓN DE REGISTRO</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Registrado por:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.operadorApp || 'No especificado'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Empresa del registrador:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.empresaOperador || 'No especificada'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Comercial Asignado -->
+      <div style="background-color: white; border-left: 4px solid #dc3545; padding: 15px; margin-bottom: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #dc3545; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          👨‍💼 <span style="margin-left: 8px;">COMERCIAL ASIGNADO</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Nombre:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.comercialAsignado || 'No asignado'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Teléfono:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.telefonoComercial || 'No especificado'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555;">Email:</td>
+            <td style="padding: 5px 0; color: #333;">${formData.mailComercial || 'No especificado'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Información Adicional -->
+      <div style="background-color: white; border-left: 4px solid #6c757d; padding: 15px; margin-bottom: 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="color: #6c757d; margin: 0 0 10px 0; font-size: 14px; display: flex; align-items: center;">
+          ℹ️ <span style="margin-left: 8px;">INFORMACIÓN ADICIONAL</span>
+        </h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">Origen:</td>
+            <td style="padding: 5px 0; color: #333;">Aplicación de recolección de datos</td>
+          </tr>`;
     
-    // Construir descripción detallada con mejor formato para las notas internas
-    let descripcion = `INFORMACIÓN DEL PROSPECTO\n`;
-    descripcion += `=============================================\n\n`;
-    
-    descripcion += `DATOS PERSONALES:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Nombre completo: ${nombreCompleto}\n`;
-    descripcion += `Teléfono: ${formData.telefono || 'No proporcionado'}\n`;
-    descripcion += `Email: ${formData.mail || 'No proporcionado'}\n\n`;
-      descripcion += `UBICACIÓN:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Localidad: ${formData.localidad || 'No proporcionada'}\n`;
-    descripcion += `Provincia: ${formData.provincia || 'No proporcionada'}\n`;
-    descripcion += `País: ${formData.pais || 'No proporcionado'}\n\n`;
-    
-    descripcion += `INTERESES (VERTICALES):\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `${formData.concatenatedCheckboxes || 'No especificados'}\n\n`;
-    
-    descripcion += `DETALLES ADICIONALES:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Comentarios: ${formData.comentarios || 'Sin comentarios'}\n`;
-    descripcion += `Monto Estimado: ${formData.montoEstimado || 'No especificado'}\n\n`;
-    
-    descripcion += `INFORMACIÓN DEL EVENTO:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Evento: ${formData.evento || 'No especificado'}\n\n`;
-    
-    descripcion += `INFORMACIÓN DE REGISTRO:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Registrado por: ${formData.operadorApp || 'No especificado'}\n`;
-    descripcion += `Empresa del registrador: ${formData.empresaOperador || 'No especificada'}\n`;
-    descripcion += `Comercial asignado: ${formData.comercialAsignado || 'No asignado'}\n`;
-    descripcion += `Teléfono del comercial: ${formData.telefonoComercial || 'No especificado'}\n`;
-    descripcion += `Email del comercial: ${formData.mailComercial || 'No especificado'}\n\n`;
-    
-    descripcion += `INFORMACIÓN ADICIONAL:\n`;
-    descripcion += `---------------------------------------------\n`;
-    descripcion += `Origen: Aplicación de recolección de datos\n`;
-    // Incluir todos los campos disponibles del formulario para asegurar que no perdemos información
-    Object.keys(formData).forEach(key => {      // Excluir campos que ya hemos incluido en secciones específicas
+    // Incluir todos los campos adicionales del formulario que no se hayan mostrado ya
+    Object.keys(formData).forEach(key => {
+      // Excluir campos que ya hemos incluido en secciones específicas
       if (!['nombre', 'apellido', 'telefono', 'mail', 'localidad', 'provincia', 'pais',
            'comentarios', 'montoEstimado', 'evento', 'operadorApp', 'empresaOperador',
            'comercialAsignado', 'telefonoComercial', 'mailComercial', 'concatenatedCheckboxes'].includes(key)) {
-        descripcion += `${key}: ${formData[key] || 'No especificado'}\n`;
+        descripcion += `
+          <tr>
+            <td style="padding: 5px 0; font-weight: bold; color: #555; width: 30%;">${key}:</td>
+            <td style="padding: 5px 0; color: #333;">${formData[key] || 'No especificado'}</td>
+          </tr>`;
       }
     });
+    
+    descripcion += `
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="text-align: center; margin-top: 20px; padding: 10px; background-color: #e9ecef; border-radius: 5px;">
+        <small style="color: #6c757d; font-size: 11px;">
+          📅 Generado automáticamente por RegistroExpoWEB • ${new Date().toLocaleString('es-ES')}
+        </small>
+      </div>
+
+    </div>`;
     
     // Construir los datos para Odoo con los ajustes solicitados
     const odooLeadData = {
